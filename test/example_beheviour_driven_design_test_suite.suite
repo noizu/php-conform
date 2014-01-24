@@ -1,0 +1,63 @@
+#Story: Example Test
+As a software developer 
+I would like to show that PHP Conform
+Can Process an example Suite.
+
+#Scenario: Step Functions
+Given a php conform test
+When running phpunit
+Then step functions from the test suite class should be callable
+And step functions included by the class should be callable
+And step functions included for only this test should be callable
+
+#Scenario: Regular Expressions
+Given a php conform test
+When we call a step function that uses a regular expression syntax to match and store the value of 5
+Then the step function should have recieved the specified param value of 5
+
+#Scenario: Dollar Sign Notation
+Given a php conform test
+When we call a step function that uses the dollar sign notation to match and store the value of 7
+Then the step function should have recieved the specified param value of 7
+
+#Scenario: Example of a Data Driven BDD Test
+Given a calculator
+When I add <input_1> plus <input_2>
+Then the total should be <output>
+
+Examples:
+    | input_1 | input_2 | output |
+    | 20      | 30      | 50     |
+    | 2       | 6       | 8      |
+    | 3       | 4       | 2      |
+                
+#Scenario: Example of Data Driven BDD Test with a missing step.
+Given a calculator
+When I add <input_1b> plus <input_2b>
+When I use a a sentance with no matching step function
+Then the Data Driven Test Should correctly mark the unimplemented step as pending for that data entry.
+And the total should be <output>
+
+Examples:
+    | input_1b | input_2b | output |
+    | 20       | 30       | 50     |
+    | 2        | 6        | 8      |
+    | 3        | 4        | 2      |
+
+
+#Scenario: Example of A Failing Bdd Test
+Given a calculator
+When I add 3 plus 3
+Then the total should be 8
+
+#Scenario: Example of An Incomplete BDD Test
+Given a calculator
+When I multiply 3 by 5
+Then the total should be 15
+And the calculator should sing a little tune
+
+#Scenario: Setup and Teardown Methods
+Given a php conform test
+When running phpunit
+Then the setup method should be called
+And the teardown method should be called

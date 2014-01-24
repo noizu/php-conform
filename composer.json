@@ -1,0 +1,24 @@
+{
+    "name": "noizu-labs/php-conform",
+    "description": "BDD Style testing extensions for PHPUnit",
+    "require": {
+    },
+    "require-dev": {
+    },
+    "license": "mit",
+    "authors": [
+        {
+            "name": "keith",
+            "email": "keith.brings@noizu.com"
+        }
+    ],
+    "minimum-stability": "dev",
+
+    "autoload": {
+        "psr-0": {
+             "NoizuLabs": "src/"
+         }
+    }
+
+
+}
