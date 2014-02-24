@@ -3,6 +3,11 @@ As a software developer
 I would like to show that PHP Conform
 Can Process an example Suite.
 
+#Scenario: Selenium tests
+Given a selenium test
+When a user navigates to google
+Then the active session page should be google
+
 #Scenario: Step Functions
 Given a php conform test
 When running phpunit

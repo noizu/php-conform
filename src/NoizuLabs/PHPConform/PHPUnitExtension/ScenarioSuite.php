@@ -12,6 +12,8 @@ require_once 'PHPUnit/Autoload.php';
  */
 abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
 {
+	protected $container; 
+	protected $webdriver = null;
     public $Story;
     public $Scenario;
     public function toString()
@@ -44,8 +46,32 @@ abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
 
     }
 
-    public function __construct($theClass = '', $name = '')
+	public function getWebDriver()
+	{
+		if($this->webdriver == null) {
+			if(isset($this->container['WebDriver'])) {
+				$this->webdriver = $this->container['WebDriver'];
+			}
+		}
+		
+		if(is_null($this->webdriver)) {
+			throw new \Exception("WebDriver not available from \$this->container['WebDriver']");
+		}
+		return($this->webdriver); 
+	}
+	
+    public function __construct($theClass = '', $name = '', $pimple = null)
     {
+		if($pimple == null)
+		{		
+			global $noizulabs_phpconform_container;
+			if(isset($noizulabs_phpconform_container))
+			{			
+				$this->container = $noizulabs_phpconform_container;
+			} else {
+				$this->container = new \Pimple\Pimple();
+			}
+		}
         $this->loadScenarioSuite();
         $this->loadSteps();
         $flag = false;

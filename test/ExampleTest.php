@@ -13,7 +13,36 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
 {
     public $setupCalled; 
     public $tearDownCalled; 
+	
+	/**
+	* @given a selenium test
+	*/
+	public function GivenASeleniumTest()
+	{
+		$this->webdriver = $this->getWebDriver(); 
 
+		$this->session = $this->webdriver->session('firefox'); 
+		die('here'); 
+	}
+
+	/**
+	* @when a user navigates to google
+	*/
+	public function WhenAUserNavigatesToGoogle()
+	{
+	
+		//$this->session->open('http://www.google.com');
+	}
+	 
+	/**
+	* @then the active session page should be google
+	*/
+	public function ThenTheActiveSessionPageShouldBeGoogle()
+	{
+		//$this->assertAreEqual("http://www.google.com", $this->session->url());
+	}
+	
+	
     /**
      * @sicenario
      * @stepClass StepsForScenario
@@ -71,7 +100,7 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
      */
     public function SetupShouldHaveBeenCalled()
     {
-	$this->assertTrue($this->setupCalled > 0, "setupCalled value was not set"); 
+		$this->assertTrue($this->setupCalled > 0, "setupCalled value was not set"); 
     }
 
 
