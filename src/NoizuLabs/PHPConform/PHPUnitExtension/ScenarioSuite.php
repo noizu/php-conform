@@ -46,11 +46,12 @@ abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
 
     }
 
-	public function getWebDriver()
+	public function getWebDriver($alternativeHost = null)
 	{
 		if($this->webdriver == null) {
 			if(isset($this->container['WebDriver'])) {
-				$this->webdriver = $this->container['WebDriver'];
+                                $host = is_null($alternativeHost) ? $this->container['SeleniumHost'] : $alternativeHost; 
+				$this->webdriver = $this->container['WebDriver']($host);
 			}
 		}
 		

@@ -22,7 +22,6 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
 		$this->webdriver = $this->getWebDriver(); 
 
 		$this->session = $this->webdriver->session('firefox'); 
-		die('here'); 
 	}
 
 	/**
@@ -31,7 +30,7 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
 	public function WhenAUserNavigatesToGoogle()
 	{
 	
-		//$this->session->open('http://www.google.com');
+	        $this->session->open('http://www.google.com/ncr');
 	}
 	 
 	/**
@@ -39,7 +38,7 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
 	*/
 	public function ThenTheActiveSessionPageShouldBeGoogle()
 	{
-		//$this->assertAreEqual("http://www.google.com", $this->session->url());
+		$this->assertEquals("http://www.google.com/", $this->session->url());
 	}
 	
 	

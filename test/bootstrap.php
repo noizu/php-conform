@@ -12,9 +12,13 @@ if(file_exists(__DIR__ . "/../vendor/autoload.php")) {
    trigger_error("Unable To Locate Required Autoloader for the NoizuLabs/FragmentedKeys Libraries"); 
 }
 
+
+$host = getenv("SELENIUM_SERVER_HOST"); 
+
 $noizulabs_phpconform_container = new \Pimple(); 
-$noizulabs_phpconform_container['SelniumHost'] = 'http://127.0.0.1:4444/wd/hub';
+$noizulabs_phpconform_container['SeleniumHost'] = $host;
 $noizulabs_phpconform_container['WebDriver'] =  function() { 
-	return new \WebDriver\WebDriver($noizulabs_phpconform_container['SeleniumHost']); 
+	$c = function($host) { return new \WebDriver\WebDriver($host) ;}; 
+        return $c; 
 };
  
