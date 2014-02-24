@@ -2,6 +2,9 @@
     "name": "noizu-labs/php-conform",
     "description": "BDD Style testing extensions for PHPUnit",
     "require": {
+		"phpunit/phpunit": "~3.7",
+		"pimple/pimple":"~1.1",
+		"instaclick/php-webdriver": "~1.2"
     },
     "require-dev": {
     },
@@ -13,12 +16,9 @@
         }
     ],
     "minimum-stability": "dev",
-
     "autoload": {
         "psr-0": {
              "NoizuLabs": "src/"
          }
     }
-
-
 }
