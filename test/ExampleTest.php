@@ -38,6 +38,14 @@ class ExampleBeheviourDrivenDesignTestSuiteTest extends PhpConform\ScenarioSuite
 
     }
 
+    /** 
+    * @then  values set by outside step classes should be available
+    */
+    public function testOutsideVars()
+    {
+       $this->assertTrue($this->outsideVar, "external steps did not correctly set my property");
+    }
+
     /**
      * @then step functions from the test suite class should be callable
      */

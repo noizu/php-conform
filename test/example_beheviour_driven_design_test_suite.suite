@@ -9,6 +9,7 @@ When running phpunit
 Then step functions from the test suite class should be callable
 And step functions included by the class should be callable
 And step functions included for only this test should be callable
+And values set by outside step classes should be available
 
 #Scenario: Regular Expressions
 Given a php conform test

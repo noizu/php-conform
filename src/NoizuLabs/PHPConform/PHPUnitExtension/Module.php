@@ -72,6 +72,14 @@ abstract class Module extends \PHPUnit_Framework_Assert
             } else {
 
                 try {
+
+                if(method_exists($this->_noizuOwner, "getReference")) {
+                    $ref  =& $this->_noizuOwner->getReference($arg);
+                    $ref = $value; 
+                    return;
+                }
+
+
                     $r = new \ReflectionObject($this->_noizuOwner);
                     $p = $r->getProperty($arg);
                     $p->setAccessible(true);

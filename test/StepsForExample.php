@@ -10,6 +10,6 @@ class StepsForExample extends PhpConform\StepAbstract
      */
     public function StepFunctionIncludedForClass()
     {
-
+       $this->outsideVar = true;
     }
 }
