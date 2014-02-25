@@ -70,7 +70,7 @@ abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
 			{			
 				$this->container = $noizulabs_phpconform_container;
 			} else {
-				$this->container = new \Pimple\Pimple();
+				$this->container = new \Pimple();
 			}
 		}
         $this->loadScenarioSuite();
