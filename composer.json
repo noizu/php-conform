@@ -4,9 +4,13 @@
     "require": {
 		"phpunit/phpunit": "~3.7",
 		"pimple/pimple":"~1.1",
-		"instaclick/php-webdriver": "~1.2"
+		"instaclick/php-webdriver": "~1.2",
+                "phpunit/phpunit-story": "~1.0.2"
     },
     "require-dev": {
+    },
+    "config": {
+        "preferred-install": "dist"
     },
     "license": "mit",
     "authors": [
