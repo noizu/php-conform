@@ -3,18 +3,18 @@
     "description": "BDD Style testing extensions for PHPUnit",
     "type": "library",
     "require": {
-        "php": ">=8.2",
+        "php": ">=8.2 <8.5",
         "ext-dom": "*",
         "ext-filter": "*",
         "ext-json": "*",
         "ext-libxml": "*",
         "ext-mbstring": "*",
         "ext-xmlwriter": "*",
-        "phpunit/phpunit": "^11.5"
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0"
     },
     "suggest": {
         "pimple/pimple": "Optional DI container used to wire Selenium/webdriver sessions into scenario suites",
-        "instaclick/php-webdriver": "Selenium WebDriver client for browser-driven scenarios (~1.2)"
+        "php-webdriver/webdriver": "Maintained Selenium WebDriver client (^1.15) for browser-driven scenarios; same WebDriver\\ namespace as the legacy instaclick/facebook clients"
     },
     "config": {
         "preferred-install": "dist",

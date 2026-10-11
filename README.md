@@ -4,8 +4,9 @@ BDD-style testing extensions for PHPUnit: write scenarios as plain-text
 `.suite` specs, bind them to step classes with docblock annotations, and get
 readable story output while they run.
 
-Modernized for **PHP 8.2+** and **PHPUnit 11** (the newest PHPUnit line that
-supports PHP 8.2; it runs on PHP 8.2–8.4).
+Modernized for **PHP 8.2–8.4** and **PHPUnit 11, 12 and 13** (PHPUnit 12
+needs PHP >= 8.3, PHPUnit 13 needs PHP >= 8.4; the combination matrix is
+exercised in CI).
 
 ## Install
 
@@ -13,10 +14,10 @@ supports PHP 8.2; it runs on PHP 8.2–8.4).
 composer require --dev noizu-labs/php-conform
 ```
 
-The package requires `phpunit/phpunit ^11.5` directly, so composer installs a
-compatible PHPUnit alongside it — or refuses the combination outright (for
-example on a project pinned to PHPUnit 10) instead of failing later at
-runtime.
+The package requires `phpunit/phpunit ^11.5 || ^12.0 || ^13.0` directly, so
+composer installs a compatible PHPUnit alongside it — or refuses the
+combination outright (for example on PHP 8.2, where PHPUnit 12+ cannot be
+installed) instead of failing later at runtime.
 
 ## Quickstart
 
@@ -195,10 +196,11 @@ after it are `[A]`, with no failure anywhere).
 ## Selenium support (optional)
 
 Scenario suites can drive a browser when `pimple/pimple` and
-`instaclick/php-webdriver` are installed:
+`php-webdriver/webdriver` (the maintained community fork, same `WebDriver\`
+namespace as the abandoned facebook/instaclick clients) are installed:
 
 ```bash
-composer require --dev pimple/pimple instaclick/php-webdriver
+composer require --dev pimple/pimple php-webdriver/webdriver
 ```
 
 Provide a container in your bootstrap and call `$this->getWebDriver()` from
