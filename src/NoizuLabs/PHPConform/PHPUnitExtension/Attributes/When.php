@@ -7,10 +7,10 @@ namespace NoizuLabs\PHPConform\PHPUnitExtension\Attributes;
 /**
  * Declare a step definition via PHP 8 attribute instead of a docblock.
  *
- *   #[Given('a calculator')]
- *   public function createCalculator() { ... }
+ *   #[When('running phpunit')]
+ *   public function runningPhpunit() { ... }
  *
- * Equivalent to the docblock form "@given a calculator". Both styles are
+ * Equivalent to the docblock form "@when running phpunit". Both styles are
  * supported; docblocks remain the canonical DSL.
  */
 #[\Attribute(\Attribute::TARGET_METHOD)]
