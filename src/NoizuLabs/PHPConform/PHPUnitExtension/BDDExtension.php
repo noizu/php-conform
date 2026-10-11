@@ -29,6 +29,8 @@ final class BDDExtension implements PhpUnitExtension
 {
     public function bootstrap(Configuration $configuration, Facade $facade, ParameterCollection $parameters): void
     {
+        // $configuration is required by the Extension contract but unused
+        // here: the printer behaviour is driven entirely by parameters.
         $colors = 'auto';
         if ($parameters->has('colors')) {
             $colors = $parameters->string('colors');

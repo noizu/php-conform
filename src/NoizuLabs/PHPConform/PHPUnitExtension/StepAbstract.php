@@ -23,8 +23,8 @@ abstract class StepAbstract extends Module
     public function setScenario(string $scenario): void
     {
         $this->_scenario = $scenario;
-        foreach ($this->_containedSteps as $key => $value) {
-            $this->_containedSteps[$key]->setScenario($scenario);
+        foreach ($this->_containedSteps as $stepModule) {
+            $stepModule->setScenario($scenario);
         }
     }
 

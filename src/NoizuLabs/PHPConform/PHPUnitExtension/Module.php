@@ -85,6 +85,7 @@ abstract class Module extends Assert
                 $this->_noizuOwner->_noizuVariableSpace[$arg] = $value;
             } else {
                 if (method_exists($this->_noizuOwner, 'getReference')) {
+                    // Write through the by-reference return value.
                     $ref =& $this->_noizuOwner->getReference($arg);
                     $ref = $value;
                     return;
