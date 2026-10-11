@@ -41,10 +41,19 @@ abstract class ScenarioSuite extends TestCase
     /** @var array<string, mixed> */
     public array $_noizuVariableSpace = [];
     public mixed $_scenario;
+    private bool $scenarioStateInitialized = false;
 
-    public function __construct(string $methodName)
+    /**
+     * PHPUnit 12 made TestCase::__construct() final, so the parsed suite,
+     * container wiring and step-module registration happen lazily, before
+     * anything needs them.
+     */
+    private function initializeScenarioState(): void
     {
-        parent::__construct($methodName);
+        if ($this->scenarioStateInitialized) {
+            return;
+        }
+        $this->scenarioStateInitialized = true;
 
         $parsed = self::parsedSuiteFor(static::class);
         $this->_scenarios = $parsed['scenarios'];
@@ -85,6 +94,8 @@ abstract class ScenarioSuite extends TestCase
     #[DataProvider('provideScenarios')]
     public function testScenario(string $scenarioName): void
     {
+        $this->initializeScenarioState();
+
         $steps = $this->_scenarios[$scenarioName] ?? [];
         $examples = $this->_examples[$scenarioName] ?? [];
 
@@ -130,6 +141,8 @@ abstract class ScenarioSuite extends TestCase
 
     public function getWebDriver(?string $alternativeHost = null): mixed
     {
+        $this->initializeScenarioState();
+
         if ($this->webdriver === null) {
             if (isset($this->container) && isset($this->container['WebDriver'])) {
                 $host = is_null($alternativeHost) ? $this->container['SeleniumHost'] : $alternativeHost;
@@ -154,6 +167,8 @@ abstract class ScenarioSuite extends TestCase
 
     public function getSuite(): string|false
     {
+        $this->initializeScenarioState();
+
         return $this->_storyName;
     }
 
@@ -373,13 +388,11 @@ abstract class ScenarioSuite extends TestCase
         $examples = [];
         $story = [];
         $storyName = '';
-        $match = [];
         $scenario = null;
 
         // $pointer targets either $scenarios[<name>], $examples[<name>] or $story
         $pointer = null;
         $emptyState = null;
-        $pointerKind = '';
 
         $headerLine = false;
 
@@ -393,11 +406,9 @@ abstract class ScenarioSuite extends TestCase
                     print("Duplicate Test Case Found ($scenario)\n in $fullFile\n\n");
                     trigger_error("duplicate scenario definition for ($scenario) in $fullFile\n", E_USER_WARNING);
                     $pointer = &$emptyState;
-                    $pointerKind = '';
                 } else {
                     $scenarios[$scenario] = [];
                     $pointer = &$scenarios[$scenario];
-                    $pointerKind = 'scenarios';
                 }
             } elseif (preg_match('/#Story:(.*)/', $line, $matches)) {
                 $mode = 'Story';
@@ -413,11 +424,9 @@ abstract class ScenarioSuite extends TestCase
                     print("multiple Story definitions found in $fullFile\n");
                     trigger_error("multiple Story definitions found in $fullFile\n", E_USER_WARNING);
                     $pointer = &$emptyState;
-                    $pointerKind = '';
                 } else {
                     $story = [];
                     $pointer = &$story;
-                    $pointerKind = 'story';
                 }
             } elseif (preg_match('/Examples:/', $line)) {
                 $mode = 'Example';
@@ -429,7 +438,6 @@ abstract class ScenarioSuite extends TestCase
                 }
                 $examples[$scenario] = [];
                 $pointer = &$examples[$scenario];
-                $pointerKind = 'examples';
             } else {
                 if ($mode === 'Example') {
                     if ($headerLine !== false) {
