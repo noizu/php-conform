@@ -92,6 +92,11 @@ Step sentences support:
   public function storeValue($matches) { /* $matches[1] */ }
   ```
 
+  The full `preg_match()` result array is passed as the method's **first
+  parameter, positionally** — any parameter name works (`$matches` is the
+  convention; `$matches[0]` is the whole step sentence, `$matches[1]` the
+  first capture group).
+
 - optional PHP 8 attributes alongside docblocks:
   `#[Given('a calculator')]`, `#[When('...')]`, `#[Then('...')]`,
   `#[PregMatch('#')]`. Docblocks remain the canonical form.
@@ -182,7 +187,10 @@ gives clean story-only output:
 
 Step statuses: `[+]` passed, `[-]` failed, `[P]` pending (no matching step
 definition — the scenario is reported incomplete), `[S]` skipped,
-`[M]` multi (data-driven), `[A]` aborted after a failure.
+`[M]` multi (data-driven), `[A]` aborted — remaining steps after a step
+that failed **or** was skipped are marked aborted instead of being run
+(the Selenium scenario shows this: the skipped step is `[S]`, the steps
+after it are `[A]`, with no failure anywhere).
 
 ## Selenium support (optional)
 

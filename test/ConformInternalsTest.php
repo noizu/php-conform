@@ -62,6 +62,12 @@ class ConformInternalsTest extends TestCase
 
     public function testAndStepsInheritLastAction(): void
     {
+        // Deliberately relies on StepAbstract's shared mutable state:
+        // within one scenario, steps run sequentially through the same
+        // runner (see Scenario::execute()), so "And" reuses the last
+        // Given/When/Then of the PREVIOUS executeStep() call. If that
+        // state ever stopped persisting between calls, this assertion
+        // fails loudly (the rewritten sentence no longer matches).
         $result = $this->steps->executeStep('Given a calculator');
         $this->assertSame('Passed', $result['result']);
 
@@ -82,6 +88,16 @@ class ConformInternalsTest extends TestCase
         $result = $this->steps->executeStep('Given the regex value is 99 red balloons');
         $this->assertSame('Passed', $result['result']);
         $this->assertSame('99', $this->steps->regexValue);
+    }
+
+    public function testPregmatchParameterNameIsIrrelevant(): void
+    {
+        // The preg_match() result is passed positionally, so the step
+        // method's parameter does not have to be called $matches.
+        $steps = new ArbitraryParamNameSteps();
+        $result = $steps->executeStep('Given any parameter name works on 77 balloons');
+        $this->assertSame('Passed', $result['result']);
+        $this->assertSame('77', $steps->captured);
     }
 
     public function testFailedAssertionMarksStepFailed(): void
@@ -209,6 +225,21 @@ class SingleLineDocblockSteps extends StepAbstract
     /** @given a calculator */
     public function createCalculator()
     {
+        $this->assertTrue(true);
+    }
+}
+
+class ArbitraryParamNameSteps extends StepAbstract
+{
+    public ?string $captured = null;
+
+    /**
+     * @pregmatch #
+     * @given any parameter name works on (.*) balloons
+     */
+    public function captureWithArbitraryParameterName($whatever)
+    {
+        $this->captured = $whatever[1];
         $this->assertTrue(true);
     }
 }

@@ -89,16 +89,15 @@ abstract class StepAbstract extends Module
                     if (isset($step['varmap'])) {
                         $args = [];
                         $i = 1;
-                        foreach ($step['varmap'] as $key => $value) {
+                        foreach ($step['varmap'] as $ignored) {
                             $args[] = $matches[$i];
                             $i++;
                         }
                         call_user_func_array([$step['class'], $step['function']], $args);
                     } else {
-                        call_user_func_array(
-                            [$step['class'], $step['function']],
-                            ['matches' => $matches]
-                        );
+                        // Pass the preg_match() result positionally so the
+                        // step method's parameter name is irrelevant.
+                        call_user_func_array([$step['class'], $step['function']], [$matches]);
                     }
                     $asserts = $this->snapshotAssertCount();
                     $response = ['result' => 'Passed', 'asserts' => $asserts, 'exception' => null];
