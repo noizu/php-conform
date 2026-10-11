@@ -1,28 +1,43 @@
 {
     "name": "noizu-labs/php-conform",
     "description": "BDD Style testing extensions for PHPUnit",
+    "type": "library",
     "require": {
-		"phpunit/phpunit": "~3.7",
-		"pimple/pimple":"~1.1",
-		"instaclick/php-webdriver": "~1.2",
-                "phpunit/phpunit-story": "~1.0.2"
+        "php": ">=8.2",
+        "ext-dom": "*",
+        "ext-filter": "*",
+        "ext-json": "*",
+        "ext-libxml": "*",
+        "ext-mbstring": "*",
+        "ext-xmlwriter": "*",
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0"
     },
-    "require-dev": {
+    "suggest": {
+        "pimple/pimple": "Optional DI container used to wire Selenium/webdriver sessions into scenario suites",
+        "php-webdriver/webdriver": "Maintained Selenium WebDriver client (^1.15) for browser-driven scenarios; same WebDriver\\ namespace as the legacy instaclick/facebook clients"
     },
     "config": {
-        "preferred-install": "dist"
+        "preferred-install": "dist",
+        "sort-packages": true
     },
-    "license": "mit",
+    "license": "MIT",
     "authors": [
         {
             "name": "keith",
             "email": "keith.brings@noizu.com"
         }
     ],
-    "minimum-stability": "dev",
+    "scripts": {
+        "test": "phpunit"
+    },
     "autoload": {
-        "psr-0": {
-             "NoizuLabs": "src/"
-         }
+        "psr-4": {
+            "NoizuLabs\\PHPConform\\": "src/NoizuLabs/PHPConform/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "NoizuLabs\\PHPConform\\Tests\\": "test/"
+        }
     }
 }

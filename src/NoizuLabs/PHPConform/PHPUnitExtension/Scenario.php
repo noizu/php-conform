@@ -1,22 +1,19 @@
 <?php
+
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
 
-if(ENABLE_UTIL)  \PHPUnit_Util_Filter::addFileToFilter(__FILE__, 'PHPUNIT');
-require_once(dirname(__FILE__) . '/Module.php');
+use PHPUnit\Framework\IncompleteTest;
+use PHPUnit\Framework\IncompleteTestError;
+use PHPUnit\Framework\SkippedTest;
 
 final class Scenario extends Module
 {
-    protected $_name = false;
-    protected $_steps = false;
-    protected $_stepRunner = false;
-    protected $_suite = false;
+    protected string $_name;
+    protected array $_steps;
+    protected StepAbstract $_stepRunner;
+    protected string $_suite;
 
-    public function getName()
-    {
-        return "hmm";
-    }
-
-    public function __construct($suite, $name, array $steps, StepAbstract $stepRunner)
+    public function __construct(string $suite, string $name, array $steps, StepAbstract $stepRunner)
     {
         $this->_suite = $suite;
         $this->_name = $name;
@@ -25,73 +22,105 @@ final class Scenario extends Module
         $this->_stepRunner->setScenario($this->_name);
     }
 
-    public function getSuite()
+    public function getName(): string
+    {
+        return $this->_name;
+    }
+
+    public function getSuite(): string
     {
         return $this->_suite;
     }
 
-    public function executeScenario(&$ref, $examples)
+    /**
+     * Execute this scenario against its step runner.
+     *
+     * When the scenario declares an Examples: table each row is executed
+     * with its <placeholder> tokens substituted. The returned record
+     * mirrors the structure the BDD printer renders (steps, per-row
+     * statuses, exceptions, assertion totals).
+     *
+     * @param array<string, list<string>> $examples
+     *
+     * @return array<string, mixed>
+     */
+    public function executeScenario(ScenarioSuite $suite, array $examples = []): array
     {
-        $ref->currentScenario = array();
-        $ref->currentScenario['steps'] = array();
-        $ref->currentScenario['status'] = "Pending";
-        $ref->currentScenario['asserts'] = 0;
+        $record = [
+            'steps' => [],
+            'status' => 'Pending',
+            'asserts' => 0,
+        ];
 
         if (empty($examples)) {
             $resp = $this->execute($this->_steps);
-            $ref->currentScenario['asserts'] += intval($resp['asserts']);
-            $ref->currentScenario['status'] = $resp['status'];
-            $ref->currentScenario['exception'] = $resp['exception'];
-            $ref->currentScenario['steps'] = $resp['steps'];
+            $record['asserts'] = (int) $resp['asserts'];
+            $record['status'] = $resp['status'];
+            $record['exception'] = $resp['exception'];
+            $record['steps'] = $resp['steps'];
         } else {
-            $ref->currentScenario['multi'] = true;
-            $ref->currentScenario['multi-steps'] = array();
-            $ref->currentScenario['examples'] = $examples;
+            $record['multi'] = true;
+            $record['multi-steps'] = ['status' => [], 'exception' => []];
+            $record['examples'] = $examples;
             $replacements = array_keys($examples);
             $count = count($examples[$replacements[0]]);
 
             $raw = $this->_steps;
+            $overall = 'Passed';
 
-            $continue = true;
-            for ($i = 0; $i < $count && $continue; $i++) {
-                $parsedSteps = array();
-                $tokens = array();
-
-
-                $rv = array();
+            for ($i = 0; $i < $count; $i++) {
+                $rv = [];
                 foreach ($replacements as $token) {
                     $rv[$token] = $examples[$token][$i];
                 }
                 $resp = $this->execute($raw, $rv);
 
+                $record['asserts'] += (int) $resp['asserts'];
+                $record['multi-steps']['status'][$i] = $resp['multi-steps']['status'];
+                $record['multi-steps']['exception'][$i] = $resp['exception'];
 
-                /** Aggregation logic */
-                $ref->currentScenario['asserts'] += intval($resp['asserts']);
-
-
-                $ref->currentScenario['multi-steps']['status'][$i] = $resp['multi-steps']['status'];
-                $ref->currentScenario['multi-steps']['exception'][$i] = $resp['exception'];
+                if ($resp['status'] !== 'Passed') {
+                    $overall = $resp['status'];
+                    if (!isset($record['exception']) && isset($resp['exception'])) {
+                        $record['exception'] = $resp['exception'];
+                    }
+                }
             }
+            $record['status'] = $overall;
 
             foreach ($raw as $v) {
-                $ref->currentScenario['steps'][] = array('step' => $v, 'status' => array('result' => 'Multi'));
+                $record['steps'][] = ['step' => $v, 'status' => ['result' => 'Multi']];
             }
         }
+
+        return $record;
     }
 
-    protected function execute($steps, $replacements = array())
+    /**
+     * @param list<string>                $steps
+     * @param array<string, string>       $replacements
+     *
+     * @return array<string, mixed>
+     */
+    protected function execute(array $steps, array $replacements = []): array
     {
         $noFailure = true;
-        $failure = null;
-        $response = array('asserts' => 0, 'result' => null, 'steps' => array(), 'exception' => null);
-
+        $response = [
+            'asserts' => 0,
+            'status' => null,
+            'steps' => [],
+            'exception' => null,
+            'multi-steps' => ['status' => []],
+        ];
 
         foreach ($replacements as $token => $value) {
-            $response['multi-steps']['status'][$token] = "Pending";
+            $response['multi-steps']['status'][$token] = 'Pending';
         }
 
+        $status = ['result' => 'Passed', 'asserts' => 0, 'exception' => null];
+
         foreach ($steps as $step) {
-            $tokens = array();
+            $tokens = [];
 
             foreach ($replacements as $token => $value) {
                 if (strpos($step, "<$token>") !== false) {
@@ -103,27 +132,34 @@ final class Scenario extends Module
             if ($noFailure) {
                 $status = $this->_stepRunner->executeStep($step);
                 $response['asserts'] += $status['asserts'];
+                if ($status['result'] === 'Exception' && isset($status['exception'])) {
+                    $response['exception'] ??= $status['exception'];
+                }
             }
 
-            $response['steps'][] = array('step' => $step, 'status' => $status);
             $stepStatus = $status['result'];
+            $response['steps'][] = ['step' => $step, 'status' => $status];
 
-            if ($status['result'] == "Failed" || $status['result'] == "Pending") {
+            if ($status['result'] === 'Failed' || $status['result'] === 'Pending' || $status['result'] === 'Skipped') {
                 $response['status'] = $status['result'];
 
                 if ($noFailure) {
                     $noFailure = false;
-                    if ($status['result'] == "Failed") {
-                        if ($status['exception'] instanceof \PHPUnit_Framework_IncompleteTest) {
-                            $response['status'] = "Pending";
-                        } else if ($status['exception'] instanceof \PHPUnit_Framework_SkippedTest) {
-                            $response['status'] = "Skipped";
+                    if ($status['result'] === 'Failed') {
+                        if (isset($status['exception']) && $status['exception'] instanceof IncompleteTest) {
+                            $response['status'] = 'Pending';
+                        } elseif (isset($status['exception']) && $status['exception'] instanceof SkippedTest) {
+                            $response['status'] = 'Skipped';
                         }
-                        $response['exception'] = $status['exception'];
-                        $status = array('result' => 'Abort', 'asserts' => 0, 'exception' => null);
+                        $response['exception'] = $status['exception'] ?? null;
+                        $status = ['result' => 'Abort', 'asserts' => 0, 'exception' => null];
+                    } elseif ($status['result'] === 'Skipped') {
+                        $response['exception'] = $status['exception'] ?? null;
+                        $status = ['result' => 'Abort', 'asserts' => 0, 'exception' => null];
                     } else {
-                        $status = array('result' => 'Pending', 'asserts' => 0, 'exception' => null);
-                        $response['exception'] = new \PHPUnit_Framework_IncompleteTestError("Step Not Found: $step");
+                        $incoming = $status['exception'] ?? null;
+                        $status = ['result' => 'Pending', 'asserts' => 0, 'exception' => null];
+                        $response['exception'] = $incoming ?? new IncompleteTestError("Step Not Found: $step");
                     }
                 }
             }
@@ -133,32 +169,10 @@ final class Scenario extends Module
             }
         }
 
-        if ($status['result'] == "Passed") {
-            $response['status'] = "Passed";
+        if ($response['status'] === null) {
+            $response['status'] = $status['result'] === 'Passed' ? 'Passed' : $status['result'];
         }
 
         return $response;
-    }
-
-    public function runTest()
-    {
-        try {
-            $response = $this->executeScenario();
-        } catch (\Exception $e) {
-            throw $e;
-        }
-        return $response;
-    }
-
-    public static function parseTestMethodAnnotations($className, $methodName = '')
-    {
-        return array(
-            'class' => array(),
-            'method' => array(),
-        );
-    }
-
-    public function getAnnotations()
-    {
     }
 }

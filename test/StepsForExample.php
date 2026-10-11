@@ -1,15 +1,20 @@
 <?php
-use NoizuLabs\PHPConform\PHPUnitExtension as PhpConform;
-require_once(dirname(__FILE__) . '/sut/Calculator.php');
 
-class StepsForExample extends PhpConform\StepAbstract
+declare(strict_types=1);
+
+namespace NoizuLabs\PHPConform\Tests;
+
+use NoizuLabs\PHPConform\PHPUnitExtension\StepAbstract;
+
+class StepsForExample extends StepAbstract
 {
-
     /**
      * @then step functions included by the class should be callable
      */
     public function StepFunctionIncludedForClass()
     {
-       $this->outsideVar = true;
+        // Module::__set with directWrite proxies this onto the owning
+        // scenario suite, where suite-level steps can read it back.
+        $this->outsideVar = true;
     }
 }

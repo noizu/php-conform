@@ -1,0 +1,33 @@
+#Story: Rendering Coverage
+As a php-conform developer
+I want every documented step mark rendered
+
+#Scenario: Deliberately Failing
+Given a rendering fixture
+When this rendering step fails
+Then this rendering step passes
+And this rendering step passes too
+
+#Scenario: Deliberately Pending
+Given a rendering fixture
+Then nobody ever defined this step
+And nobody defined this one either
+
+#Scenario: Deliberately Skipped
+Given a rendering fixture
+When this rendering step is skipped
+Then this rendering step passes
+
+#Scenario: Deliberately Incomplete
+Given a rendering fixture
+When this rendering step is incomplete
+
+#Scenario: Multi With Failing Row
+Given a rendering fixture
+When the rendering fixture stores <value>
+Then the stored rendering value should be <expected>
+
+Examples:
+    | value | expected |
+    | 7     | 7        |
+    | 8     | 99       |

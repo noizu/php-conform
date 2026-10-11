@@ -1,0 +1,7 @@
+#Story: Set Up Order
+As a suite author
+I want the suite state ready before my setUp code runs
+
+#Scenario: State Ready During Set Up
+Given the suite state was captured during setUp
+Then the captured state proves initialization ran first

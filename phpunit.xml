@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd"
+         bootstrap="test/bootstrap.php"
+         cacheDirectory=".phpunit-cache"
+         colors="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerWarnings="true">
+    <testsuites>
+        <testsuite name="php-conform">
+            <directory>test</directory>
+            <!-- Deliberately failing/pending/skipped fixture scenarios: run
+                 in isolation by ScenarioRenderingOutputTest, which asserts
+                 on the rendered marks. They must not run here.
+                 NOTE the trailing slash: <exclude> is a string-prefix match
+                 (ExcludeIterator::accept does str_starts_with(realPath,
+                 exclude)), so "test/Rendering" would also swallow sibling
+                 files like test/RenderingFooTest.php. -->
+            <exclude>test/Rendering/</exclude>
+        </testsuite>
+    </testsuites>
+
+    <extensions>
+        <bootstrap class="\NoizuLabs\PHPConform\PHPUnitExtension\BDDExtension"/>
+    </extensions>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+</phpunit>
