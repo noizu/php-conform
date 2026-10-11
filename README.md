@@ -4,7 +4,7 @@ BDD-style testing extensions for PHPUnit: write scenarios as plain-text
 `.suite` specs, bind them to step classes with docblock annotations, and get
 readable story output while they run.
 
-Modernized for **PHP 8.2–8.4** and **PHPUnit 11, 12 and 13** (PHPUnit 12
+Modernized for **PHP 8.2–8.5** and **PHPUnit 11, 12 and 13** (PHPUnit 12
 needs PHP >= 8.3, PHPUnit 13 needs PHP >= 8.4; the combination matrix is
 exercised in CI).
 

@@ -3,7 +3,7 @@
     "description": "BDD Style testing extensions for PHPUnit",
     "type": "library",
     "require": {
-        "php": ">=8.2 <8.5",
+        "php": ">=8.2",
         "ext-dom": "*",
         "ext-filter": "*",
         "ext-json": "*",

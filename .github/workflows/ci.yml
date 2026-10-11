@@ -15,7 +15,8 @@ jobs:
     # multiple PHPUnit majors, so each cell runs `composer update` with
     # a temporary constraint pin instead of `composer install`.
     # Impossible pairs (PHPUnit 12 needs PHP >= 8.3, PHPUnit 13 needs
-    # PHP >= 8.4) are omitted.
+    # PHP >= 8.4) are omitted. The committed lock itself is exercised by
+    # the separate locked-install job below.
     name: PHPUnit ${{ matrix.phpunit }} (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     strategy:
@@ -34,6 +35,12 @@ jobs:
             phpunit: '^12.0'
           - php: '8.4'
             phpunit: '^13.0'
+          - php: '8.5'
+            phpunit: '^11.5'
+          - php: '8.5'
+            phpunit: '^12.0'
+          - php: '8.5'
+            phpunit: '^13.0'
     steps:
       - name: Checkout
         # v4.4.0
@@ -51,6 +58,39 @@ jobs:
 
       - name: Install dependencies (PHPUnit ${{ matrix.phpunit }})
         run: composer update --no-interaction --no-progress --with "phpunit/phpunit:${{ matrix.phpunit }}"
+
+      - name: Run test suite
+        run: vendor/bin/phpunit --no-progress
+
+  locked-install:
+    # The matrix above always resolves dependencies with `composer update`,
+    # so the committed composer.lock would never be exercised anywhere:
+    # `composer validate --strict` only checks the content-hash against
+    # composer.json, not that the lock still installs (e.g. a lock pinning
+    # a since-yanked version would keep every matrix cell green while every
+    # fresh `composer install` breaks). This job installs exactly what the
+    # lock pins and runs the suite against it. The lock is resolved on the
+    # lowest supported PHP (8.2), pinning the PHPUnit major that combination
+    # allows (^11.5).
+    name: Locked install (composer install, PHP 8.2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up PHP
+        # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Validate composer.json and lock
+        run: composer validate --strict
+
+      - name: Install dependencies from composer.lock
+        run: composer install --no-interaction --no-progress
 
       - name: Run test suite
         run: vendor/bin/phpunit --no-progress
