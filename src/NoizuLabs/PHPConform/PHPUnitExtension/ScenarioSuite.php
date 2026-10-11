@@ -2,6 +2,7 @@
 
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
 
+use PHPUnit\Framework\Attributes\Before;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\IncompleteTestError;
 use PHPUnit\Framework\TestCase;
@@ -44,16 +45,31 @@ abstract class ScenarioSuite extends TestCase
     private bool $scenarioStateInitialized = false;
 
     /**
-     * PHPUnit 12 made TestCase::__construct() final, so the parsed suite,
-     * container wiring and step-module registration happen lazily, before
-     * anything needs them.
+     * Parse the suite file, wire the DI container and register the
+     * @stepClass modules.
+     *
+     * PHPUnit 12 made TestCase::__construct() final, so this work — which
+     * used to run in the constructor, i.e. BEFORE setUp() and any #[Before]
+     * hook — cannot live there anymore. It runs instead from the #[Before]
+     * hook and setUp() below: PHPUnit collects #[Before] methods from the
+     * whole class hierarchy (base classes first) and runs them before
+     * setUp(), so subclasses can read $this->container, $this->_storyName,
+     * $this->_scenarios and $this->_stepRunner from their own setUp() or
+     * #[Before] hooks, exactly as in the constructor era — even if they
+     * override setUp() without calling parent::setUp().
+     *
+     * Instances driven outside PHPUnit's runner (direct instantiation, see
+     * ScenarioRenderingOutputTest) are covered by the idempotent calls at
+     * the top of testScenario(), getWebDriver() and getSuite().
+     *
+     * The method is idempotent and protected, so subclasses may safely
+     * call or override it.
      */
-    private function initializeScenarioState(): void
+    protected function initializeScenarioState(): void
     {
         if ($this->scenarioStateInitialized) {
             return;
         }
-        $this->scenarioStateInitialized = true;
 
         $parsed = self::parsedSuiteFor(static::class);
         $this->_scenarios = $parsed['scenarios'];
@@ -68,6 +84,34 @@ abstract class ScenarioSuite extends TestCase
         }
 
         $this->loadSteps();
+
+        // Flag set LAST: if anything above throws (e.g. an unresolvable
+        // @stepClass in loadSteps()), the object stays uninitialized, so a
+        // caller that catches and retries gets a real re-run instead of a
+        // permanently-initialized-but-empty suite.
+        $this->scenarioStateInitialized = true;
+    }
+
+    /**
+     * Runs before setUp() (and before subclass #[Before] hooks) under
+     * PHPUnit's runner; see initializeScenarioState() for the ordering
+     * contract this restores.
+     */
+    #[Before]
+    protected function initializeScenarioStateBeforeTest(): void
+    {
+        $this->initializeScenarioState();
+    }
+
+    /**
+     * Belt-and-braces twin of the #[Before] hook above, for runners or
+     * manual callers that invoke setUp() without collecting hook methods.
+     * Subclasses overriding setUp() should call parent::setUp() as usual —
+     * the suite state exists by then either way.
+     */
+    protected function setUp(): void
+    {
+        $this->initializeScenarioState();
     }
 
     /**
