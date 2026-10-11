@@ -2,22 +2,46 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
-    name: PHPUnit (PHP ${{ matrix.php }})
+    # Every (PHP, PHPUnit major) combination the composer constraint
+    # allows must be proven here. A single composer.lock cannot express
+    # multiple PHPUnit majors, so each cell runs `composer update` with
+    # a temporary constraint pin instead of `composer install`.
+    # Impossible pairs (PHPUnit 12 needs PHP >= 8.3, PHPUnit 13 needs
+    # PHP >= 8.4) are omitted.
+    name: PHPUnit ${{ matrix.phpunit }} (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3', '8.4']
+        include:
+          - php: '8.2'
+            phpunit: '^11.5'
+          - php: '8.3'
+            phpunit: '^11.5'
+          - php: '8.3'
+            phpunit: '^12.0'
+          - php: '8.4'
+            phpunit: '^11.5'
+          - php: '8.4'
+            phpunit: '^12.0'
+          - php: '8.4'
+            phpunit: '^13.0'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -25,8 +49,8 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict
 
-      - name: Install dependencies
-        uses: ramsey/composer-install@v3
+      - name: Install dependencies (PHPUnit ${{ matrix.phpunit }})
+        run: composer update --no-interaction --no-progress --with "phpunit/phpunit:${{ matrix.phpunit }}"
 
       - name: Run test suite
-        run: composer test
+        run: vendor/bin/phpunit --no-progress
