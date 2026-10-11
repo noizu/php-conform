@@ -13,10 +13,18 @@ supports PHP 8.2; it runs on PHP 8.2–8.4).
 composer require --dev noizu-labs/php-conform
 ```
 
+The package requires `phpunit/phpunit ^11.5` directly, so composer installs a
+compatible PHPUnit alongside it — or refuses the combination outright (for
+example on a project pinned to PHPUnit 10) instead of failing later at
+runtime.
+
 ## Quickstart
 
-**1. Describe your story in a `.suite` file** (named after your test class in
-snake_case, next to it — `CalculatorScenarioTest` → `calculator_scenario.suite`):
+**1. Describe your story in a `.suite` file.** The file is named after your
+test class with a trailing `Test` removed and the rest snake_cased, and sits
+next to it in the same directory — `CalculatorScenarioTest` →
+`calculator_scenario.suite`. (A `protected string $scenarioFile` property on
+the suite class points somewhere else.)
 
 ```
 #Story: Calculator
@@ -39,30 +47,32 @@ Examples:
     | 4 | 5 | 9 |
 ```
 
-**2. Define steps in a class extending `StepAbstract`:**
+**2. Define steps in a class extending `StepAbstract`** (single-line or
+multi-line docblocks both work):
 
 ```php
 use NoizuLabs\PHPConform\PHPUnitExtension\StepAbstract;
-use NoizuLabs\PHPConform\Tests\sut\Calculator;
 
 class ExampleSteps extends StepAbstract
 {
+    protected int $total = 0;
+
     /** @given a calculator */
     public function createCalculator()
     {
-        $this->_calculator = new Calculator();
+        $this->total = 0;
     }
 
     /** @when I add $a plus $b */
     public function Addition($a, $b)
     {
-        $this->_calculator->add((int) $a, (int) $b);
+        $this->total = (int) $a + (int) $b;
     }
 
     /** @then the total should be $total */
     public function checkTotal($total)
     {
-        $this->assertEquals((int) $total, $this->_calculator->equals());
+        $this->assertEquals((int) $total, $this->total);
     }
 }
 ```
@@ -86,7 +96,22 @@ Step sentences support:
   `#[Given('a calculator')]`, `#[When('...')]`, `#[Then('...')]`,
   `#[PregMatch('#')]`. Docblocks remain the canonical form.
 
-**3. Wire the spec into a test class extending `ScenarioSuite`:**
+**3. Make your step and suite classes autoloadable.** PHPUnit only loads
+`*Test.php` files itself; step classes and any other helpers must be
+reachable through composer's autoloader. The simplest way is a classmap over
+your tests directory — add this to `composer.json` and regenerate:
+
+```json
+"autoload-dev": {
+    "classmap": ["tests/"]
+}
+```
+
+```bash
+composer dump-autoload
+```
+
+**4. Wire the spec into a test class extending `ScenarioSuite`:**
 
 ```php
 use NoizuLabs\PHPConform\PHPUnitExtension\ScenarioSuite;
@@ -112,11 +137,18 @@ public function addingExamples()
 }
 ```
 
-**4. Register the BDD output extension in `phpunit.xml`** (PHPUnit 10+
-dropped result printers, so story output is an event extension):
+**5. Point PHPUnit at your tests and register the BDD output extension in
+`phpunit.xml`** (PHPUnit 10+ dropped result printers, so story output is an
+event extension). Without a `<testsuites>` entry PHPUnit has nothing to run:
 
 ```xml
-<phpunit bootstrap="vendor/autoload.php" colors="true">
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true" cacheDirectory=".phpunit-cache">
+    <testsuites>
+        <testsuite name="default">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
     <extensions>
         <bootstrap class="\NoizuLabs\PHPConform\PHPUnitExtension\BDDExtension"/>
     </extensions>
