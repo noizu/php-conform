@@ -4,14 +4,12 @@
     "type": "library",
     "require": {
         "php": ">=8.2",
-        "ext-mbstring": "*",
         "ext-dom": "*",
+        "ext-filter": "*",
         "ext-json": "*",
         "ext-libxml": "*",
+        "ext-mbstring": "*",
         "ext-xmlwriter": "*",
-        "ext-filter": "*"
-    },
-    "require-dev": {
         "phpunit/phpunit": "^11.5"
     },
     "suggest": {
