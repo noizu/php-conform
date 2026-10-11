@@ -150,7 +150,11 @@ abstract class StepAbstract extends Module
     {
         foreach ($this->_containedSteps as $stepRunner) {
             $response = $stepRunner->executeStep($stepString);
-            if ($response['result'] !== 'Pending') {
+            // Pending WITH an exception means the step matched a module
+            // deeper in the chain and called markTestIncomplete(): the
+            // match is consumed, return it instead of dropping the
+            // exception by trying further modules.
+            if ($response['result'] !== 'Pending' || isset($response['exception'])) {
                 return $response;
             }
         }

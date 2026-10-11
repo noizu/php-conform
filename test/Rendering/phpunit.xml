@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Isolated config for the rendering-coverage fixtures. These scenarios
+     deliberately fail/skip, so they must never run as part of the main
+     suite: ScenarioRenderingOutputTest runs phpunit with this config in a
+     child process and asserts on the rendered story output. -->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd"
+         bootstrap="../../test/bootstrap.php"
+         colors="false"
+         cacheResult="false">
+    <testsuites>
+        <testsuite name="php-conform-rendering">
+            <file>./RenderingCoverageTest.php</file>
+        </testsuite>
+    </testsuites>
+
+    <extensions>
+        <bootstrap class="\NoizuLabs\PHPConform\PHPUnitExtension\BDDExtension"/>
+    </extensions>
+</phpunit>

@@ -13,6 +13,10 @@
     <testsuites>
         <testsuite name="php-conform">
             <directory>test</directory>
+            <!-- Deliberately failing/pending/skipped fixture scenarios: run
+                 in isolation by ScenarioRenderingOutputTest, which asserts
+                 on the rendered marks. They must not run here. -->
+            <exclude>test/Rendering</exclude>
         </testsuite>
     </testsuites>
 
