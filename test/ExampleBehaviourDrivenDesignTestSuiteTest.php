@@ -17,6 +17,13 @@ class ExampleBehaviourDrivenDesignTestSuiteTest extends ScenarioSuite
     public static int $tearDownRuns = 0;
 
     /**
+     * Declared (rather than relying on ScenarioSuite's
+     * #[\AllowDynamicProperties]) so the Selenium session is a first-class
+     * property. $webdriver is already declared on ScenarioSuite itself.
+     */
+    public mixed $session = null;
+
+    /**
      * @given a selenium test
      */
     public function GivenASeleniumTest()
