@@ -1,22 +1,24 @@
 <?php
+
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
+
+use PHPUnit\Framework\AssertionFailedError;
 
 abstract class StepAbstract extends Module
 {
-
-    protected $_containedSteps = array();
-    protected $_regexMap = array();
-    protected $_failed = false;
-    protected $_failure = null;
-    protected $_scenario = "";
-    protected $_lastAction = null;
+    protected array $_containedSteps = [];
+    protected array $_regexMap = [];
+    protected bool $_failed = false;
+    protected mixed $_failure = null;
+    protected string $_scenario = '';
+    protected ?string $_lastAction = null;
 
     public function __construct()
     {
         $this->registerSteps();
     }
 
-    public function setScenario($scenario)
+    public function setScenario(string $scenario): void
     {
         $this->_scenario = $scenario;
         foreach ($this->_containedSteps as $key => $value) {
@@ -24,27 +26,34 @@ abstract class StepAbstract extends Module
         }
     }
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->_lastAction = null;
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
-
     }
 
-    public function executeStep($stepString)
+    /**
+     * Match a plain-language step ("Given a calculator", "And the total
+     * should be 5", ...) against the registered step definitions and run
+     * the first match.
+     *
+     * @return array{result: string, asserts: int, exception: ?\Exception}
+     */
+    public function executeStep(string $stepString): array
     {
-        if (strpos(strtolower($stepString), "given") === 0) {
-            $this->_lastAction = "Given";
-        } else if (strpos(strtolower($stepString), "when") === 0) {
-            $this->_lastAction = "When";
-        } else if (strpos(strtolower($stepString), "then") === 0) {
-            $this->_lastAction = "Then";
-        } else if (strpos(strtolower($stepString), "and") === 0 || strpos(strtolower($stepString), "but") === 0) {
-            if (is_null($this->_lastAction)) {
-                trigger_error("And or But may only be used after Given, When or Then", E_USER_ERROR);
+        $lowered = strtolower($stepString);
+        if (str_starts_with($lowered, 'given')) {
+            $this->_lastAction = 'Given';
+        } elseif (str_starts_with($lowered, 'when')) {
+            $this->_lastAction = 'When';
+        } elseif (str_starts_with($lowered, 'then')) {
+            $this->_lastAction = 'Then';
+        } elseif (str_starts_with($lowered, 'and') || str_starts_with($lowered, 'but')) {
+            if ($this->_lastAction === null) {
+                trigger_error('And or But may only be used after Given, When or Then', E_USER_ERROR);
             } else {
                 $stepString = $this->_lastAction . substr($stepString, 3);
             }
@@ -54,170 +63,185 @@ abstract class StepAbstract extends Module
         if ($result['result'] !== 'Pending') {
             return $result;
         }
-        $result = $this->executeContainedSteps($stepString);
-        return $result;
+
+        return $this->executeContainedSteps($stepString);
     }
 
-    public function addStepModule(StepAbstract $stepSuite)
+    public function addStepModule(StepAbstract $stepSuite): void
     {
         $this->_containedSteps[] = $stepSuite;
     }
 
-    protected function executeLocalSteps($stepString)
+    protected function executeLocalSteps(string $stepString): array
     {
         foreach ($this->_regexMap as $step) {
             if ($step['regex']) {
-                $matches = array();
-                if (preg_match($step['string'], $stepString, $matches)) {
-                    try {
-                        if (isset($step['varmap'])) {
-                            $args = array();
-                            $i = 1;
-                            foreach ($step['varmap'] as $key => $value) {
-                                $args[] = $matches[$i];
-                                $i++;
-                            }
-                            call_user_func_array(array($step['class'], $step['function']), $args);
-                        } else {
-                            call_user_func_array(
-                                array($step['class'],
-                                $step['function']),
-                                array("matches" => $matches)
-                            );
+                $matches = [];
+                if (!preg_match($step['string'], $stepString, $matches)) {
+                    continue;
+                }
+                try {
+                    if (isset($step['varmap'])) {
+                        $args = [];
+                        $i = 1;
+                        foreach ($step['varmap'] as $key => $value) {
+                            $args[] = $matches[$i];
+                            $i++;
                         }
-                        $asserts = $this->getCount();
-                        $this->resetCount();
-                        $response = array('result' => 'Passed', 'asserts' => $asserts, 'exception' => null);
-                    } catch (\PHPUnit_Framework_AssertionFailedError $e) {
-                        $asserts = $this->getCount();
-                        $this->resetCount();
-
-                        $this->_failed = true;
-                        $this->_failure = $e;
-                        $response = array('result' => 'Failed', 'asserts' => $asserts, 'exception' => $e);
-                    } catch (\Exception $e) {
-                        $asserts = $this->getCount();
-                        $this->resetCount();
-                        $this->_failed = true;
-                        $this->_failure = $e;
-                        $response = array('result' => 'Exception', 'asserts' => $asserts, 'exception' => $e);
+                        call_user_func_array([$step['class'], $step['function']], $args);
+                    } else {
+                        call_user_func_array(
+                            [$step['class'], $step['function']],
+                            ['matches' => $matches]
+                        );
                     }
-                    return $response;
+                    $asserts = $this->snapshotAssertCount();
+                    $response = ['result' => 'Passed', 'asserts' => $asserts, 'exception' => null];
+                } catch (AssertionFailedError $e) {
+                    $asserts = $this->snapshotAssertCount();
+                    $this->_failed = true;
+                    $this->_failure = $e;
+                    $response = ['result' => 'Failed', 'asserts' => $asserts, 'exception' => $e];
+                } catch (\Exception $e) {
+                    $asserts = $this->snapshotAssertCount();
+                    $this->_failed = true;
+                    $this->_failure = $e;
+                    $response = ['result' => 'Exception', 'asserts' => $asserts, 'exception' => $e];
                 }
-            } else {
-                if ($step['string'] == $stepString) {
-                    try {
-                        call_user_func_array(array($step['class'], $step['function']), array());
-                        $asserts = $this->getCount();
-                        $this->resetCount();
+                return $response;
+            }
 
-
-                        $response = "Passed";
-                        $response = array('result' => 'Passed', 'asserts' => $asserts, 'exception' => null);
-                    } catch (\PHPUnit_Framework_AssertionFailedError $e) {
-                        $asserts = $this->getCount();
-                        $this->resetCount();
-
-                        $this->_failed = true;
-                        $this->_failure = $e;
-                        $response = array('result' => 'Failed', 'asserts' => $asserts, 'exception' => $e);
-                    } catch (\Exception $e) {
-                        $asserts = $this->getCount();
-                        $this->resetCount();
-                        $this->_failed = true;
-                        $this->_failure = $e;
-                        $response = array('result' => 'Exception', 'asserts' => $asserts, 'exception' => $e);
-                    }
-
-                    return $response;
+            if ($step['string'] === $stepString) {
+                try {
+                    call_user_func_array([$step['class'], $step['function']], []);
+                    $asserts = $this->snapshotAssertCount();
+                    $response = ['result' => 'Passed', 'asserts' => $asserts, 'exception' => null];
+                } catch (AssertionFailedError $e) {
+                    $asserts = $this->snapshotAssertCount();
+                    $this->_failed = true;
+                    $this->_failure = $e;
+                    $response = ['result' => 'Failed', 'asserts' => $asserts, 'exception' => $e];
+                } catch (\Exception $e) {
+                    $asserts = $this->snapshotAssertCount();
+                    $this->_failed = true;
+                    $this->_failure = $e;
+                    $response = ['result' => 'Exception', 'asserts' => $asserts, 'exception' => $e];
                 }
+                return $response;
             }
         }
 
-        $asserts = $this->getCount();
-        $this->resetCount();
-        return array('result' => 'Pending', 'asserts' => $asserts, 'exception' => null);
+        return ['result' => 'Pending', 'asserts' => $this->snapshotAssertCount(), 'exception' => null];
     }
 
-    protected function executeContainedSteps($stepString)
+    protected function executeContainedSteps(string $stepString): array
     {
-        if (is_array($this->_containedSteps)) {
-            foreach ($this->_containedSteps as $stepRunner) {
-                $response = $stepRunner->executeStep($stepString);
-                if ($response['result'] !== 'Pending') {
-                    return $response;
-                }
+        foreach ($this->_containedSteps as $stepRunner) {
+            $response = $stepRunner->executeStep($stepString);
+            if ($response['result'] !== 'Pending') {
+                return $response;
             }
         }
-        $asserts = $this->getCount();
-        $this->resetCount();
-        return array('result' => 'Pending', 'asserts' => $asserts, 'exception' => null);
+
+        return ['result' => 'Pending', 'asserts' => $this->snapshotAssertCount(), 'exception' => null];
     }
 
-    public function registerSteps()
+    private function snapshotAssertCount(): int
+    {
+        $asserts = $this->assertionsPerformed();
+        $this->resetAssertionCount();
+        return $asserts;
+    }
+
+    public function registerSteps(): void
     {
         $this->registerClassSteps($this);
     }
 
-    public function registerClassSteps($targetClass)
+    /**
+     * Scan a class for @given/@when/@then docblock step definitions.
+     *
+     * Three binding styles are supported:
+     *  - exact sentence match:            @when running phpunit
+     *  - pregmatch + capture groups:      @pregmatch # ... (.*) ...   -> $matches
+     *  - dollar-sign token binding:       @when I add $arg1 plus $arg2
+     *    where each $token becomes a ([^\s]*) capture bound, in order,
+     *    to the method's parameters.
+     *
+     * As an alternative to docblocks, step definitions may also be declared
+     * with PHP 8 attributes: #[Given('a calculator')], #[When('...')],
+     * #[Then('...')] and #[PregMatch('/')]. Docblock support is unchanged;
+     * attributes are additive.
+     */
+    public function registerClassSteps(object $targetClass): void
     {
-        $reflection = new \ReflectionClass(get_class($targetClass));
+        $reflection = new \ReflectionClass($targetClass);
         $methods = $reflection->getMethods();
-        $matches = array();
-        $steps = array();
+        $matches = [];
 
         foreach ($methods as $method) {
             $doc = $method->getDocComment();
+            $doc = $doc === false ? '' : $doc;
             $regexp = false;
-            $delim = "/";
-            $varmap = null;
+            $delim = '/';
 
-            if (preg_match("/@pregmatch (.)/", $doc, $matches)) {
+            if (preg_match('/@pregmatch (.)/', $doc, $matches)) {
                 $regexp = true;
-                if (isset($matches[1])) {
-                    $delim = $matches[1];
-                } else {
-                    $delim = "/";
+                $delim = $matches[1] ?? '/';
+            }
+
+            $sentence = '';
+
+            if (preg_match('/@([tT]hen|[wW]hen|[gG]iven) (.*)/', $doc, $matches)) {
+                $sentence = ucfirst($matches[1]) . ' ' . trim($matches[2]);
+            }
+
+            $varmap = null;
+            foreach ($method->getAttributes() as $attribute) {
+                $name = $attribute->getName();
+                $short = substr($name, (int) strrpos($name, '\\'));
+                $args = $attribute->getArguments();
+                $text = isset($args[0]) && is_string($args[0]) ? $args[0] : '';
+                if ($short === 'PregMatch' && $text !== '') {
+                    $regexp = true;
+                    $delim = $text;
+                } elseif (in_array($short, ['Given', 'When', 'Then'], true) && $text !== '' && $sentence === '') {
+                    $sentence = $short . ' ' . trim($text);
                 }
             }
 
-            $sentence = "";
-
-            if (preg_match("/@([tT]hen|[wW]hen|[gG]iven) (.*)/", $doc, $matches)) {
-                $sentence = ucfirst($matches[1]) . " " . trim($matches[2]);
-            }
-
-            if (strlen($sentence) === 0) {
+            if ($sentence === '') {
                 $function = $method->getShortName();
-                if (preg_match("/^([tT]hen|[wW]hen|[gG]iven) (.*)/", $function, $matches)) {
-                    $sentence = ucfirst($matches[1]) . trim($matches[2]);
+                if (preg_match('/^([tT]hen|[wW]hen|[gG]iven) (.*)/', $function, $matches)) {
+                    $sentence = ucfirst($matches[1]) . ' ' . trim($matches[2]);
                 }
             }
 
-            // if user has not specified regexp mode then look for dollar signs in sentence,
-            // if found pop names on params array
-            if (strlen($sentence)) {
-
-                if (!$regexp) {
-                    if (preg_match_all("/(\\s\\\$[^\\s]*)/", $sentence, $matches)) {
-                        $regexp = true;
-                        array_shift($matches);
-                        $varmap = $matches[0];
-                        $sentence = preg_replace("/(\\s\\\$[^\\s]*)/", " ([^\s]*)", $sentence);
-                    }
-                }
-
-                if ($regexp) {
-                    $sentence = $delim . $sentence . $delim;
-                }
-                $this->_regexMap[] = array(
-                    'regex' => $regexp,
-                    'string' => $sentence,
-                    'varmap' => $varmap,
-                    'class' => $targetClass,
-                    'function' => $method->getShortName(),
-                );
+            if ($sentence === '') {
+                continue;
             }
+
+            // If the user has not specified regexp mode, look for dollar
+            // signs in the sentence; when found, pop names onto the varmap.
+            if (!$regexp) {
+                if (preg_match_all('/(\s\$[^\s]*)/', $sentence, $matches)) {
+                    $regexp = true;
+                    $varmap = $matches[0];
+                    $sentence = preg_replace('/(\s\$[^\s]*)/', ' ([^\s]*)', $sentence);
+                }
+            }
+
+            if ($regexp) {
+                $sentence = $delim . $sentence . $delim;
+            }
+
+            $this->_regexMap[] = [
+                'regex' => $regexp,
+                'string' => $sentence,
+                'varmap' => $varmap,
+                'class' => $targetClass,
+                'function' => $method->getShortName(),
+            ];
         }
     }
 }

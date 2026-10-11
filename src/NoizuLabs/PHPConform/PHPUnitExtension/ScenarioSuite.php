@@ -1,112 +1,171 @@
 <?php
+
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
 
-/** @todo - Restore functionality from phpunit 3.4 utils class I am disabling here*/
-DEFINE("ENABLE_UTIL", false);
-
-require_once 'PHPUnit/Autoload.php';
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\IncompleteTestError;
+use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\SkippedWithMessageException;
+use RuntimeException;
 
 /**
- *  The ScenarioSuite class provides the phphook phpunit needs to access a BDD.suite file.
- *  We use some reflection to muscle our way into the phpunit engine and override a few default behaviors.
+ * The ScenarioSuite class provides the hook PHPUnit needs to run a BDD
+ * .suite file: each scenario in the file becomes one PHPUnit test.
+ *
+ * Modern PHPUnit (10+) removed TestListener/result-printer plugins and made
+ * TestCase::run() final, so the old reflection shunt into PHPUnit's result
+ * object is gone. Instead:
+ *
+ *  - scenarios are surfaced through a static data provider
+ *    (one PHPUnit test per #Scenario: block, named after the scenario), and
+ *  - the story/step rendering is emitted by the event-driven BDDExtension
+ *    (see BDDExtension.php), registered from phpunit.xml.
  */
-abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
+#[\AllowDynamicProperties]
+abstract class ScenarioSuite extends TestCase
 {
-	protected $container; 
-	protected $webdriver = null;
-    public $Story;
-    public $Scenario;
-    public function toString()
+    /** @var array<class-string, array{scenarios: array<string, list<string>>, examples: array<string, array<string, list<string>>>, story: list<string>, storyName: string}> */
+    private static array $parsedSuites = [];
+
+    protected mixed $container = null;
+    protected mixed $webdriver = null;
+    public mixed $Story;
+    public mixed $Scenario;
+
+    /** @var array<string, list<string>> */
+    protected array $_scenarios = [];
+    protected string|false $_storyName = false;
+    /** @var array<string, array<string, list<string>>> */
+    protected array $_examples = [];
+    protected ?StepAbstract $_stepRunner = null;
+    /** @var array<string, mixed> */
+    public array $_noizuVariableSpace = [];
+    public mixed $_scenario;
+
+    public function __construct(string $methodName)
     {
-        return "Story:" . trim($this->Story) . " \"" . trim($this->Scenario) . "\"";
-    }
+        parent::__construct($methodName);
 
-    protected $_story = array();
-    protected $_storyName = false;
-    protected $_scenarios = array();
-    protected $_stepRunner;
-    protected $_examples;
-    protected $_tests;
-    protected $_stockStoryPrinter = null;
-    public $_scenario;
+        $parsed = self::parsedSuiteFor(static::class);
+        $this->_scenarios = $parsed['scenarios'];
+        $this->_examples = $parsed['examples'];
+        $this->_storyName = $parsed['storyName'];
 
-    public function &getReference($arg)
-    {
-        if(property_exists($this,$arg)) {
-
-        } else {
-            $this->arg = null;
+        global $noizulabs_phpconform_container;
+        if (isset($noizulabs_phpconform_container)) {
+            $this->container = $noizulabs_phpconform_container;
+        } elseif (class_exists(\Pimple\Container::class)) {
+            $this->container = new \Pimple\Container();
         }
 
-        return $this->$arg;
-    }
-
-    public function testPHPConformTestSuite()
-    {
-
-    }
-
-	public function getWebDriver($alternativeHost = null)
-	{
-		if($this->webdriver == null) {
-			if(isset($this->container['WebDriver'])) {
-                                $host = is_null($alternativeHost) ? $this->container['SeleniumHost'] : $alternativeHost; 
-				$this->webdriver = $this->container['WebDriver']($host);
-			}
-		}
-		
-		if(is_null($this->webdriver)) {
-			throw new \Exception("WebDriver not available from \$this->container['WebDriver']");
-		}
-		return($this->webdriver); 
-	}
-	
-    public function __construct($theClass = '', $name = '', $pimple = null)
-    {
-		if($pimple == null)
-		{		
-			global $noizulabs_phpconform_container;
-			if(isset($noizulabs_phpconform_container))
-			{			
-				$this->container = $noizulabs_phpconform_container;
-			} else {
-				$this->container = new \Pimple();
-			}
-		}
-        $this->loadScenarioSuite();
         $this->loadSteps();
-        $flag = false;
     }
 
-    public function &register(Module &$mod, $directWrite = false)
+    /**
+     * Data provider feeding one PHPUnit test per #Scenario: block in the
+     * suite file. PHPUnit resolves providers at suite-build time, before
+     * any instance exists, so this must be static.
+     *
+     * @return array<string, list{string}>
+     */
+    public static function provideScenarios(): array
     {
-        $mod->register($this, $directWrite);
-        return $mod;
+        $parsed = self::parsedSuiteFor(static::class);
+        $provider = [];
+        foreach (array_keys($parsed['scenarios']) as $scenario) {
+            $provider[$scenario] = [$scenario];
+        }
+        return $provider;
     }
 
-    public function count()
+    /**
+     * The single PHPUnit test method; runs the scenario named by the
+     * current data set and maps its outcome onto PHPUnit's outcome model.
+     */
+    #[DataProvider('provideScenarios')]
+    public function testScenario(string $scenarioName): void
     {
-        return count($this->_scenarios);
+        $steps = $this->_scenarios[$scenarioName] ?? [];
+        $examples = $this->_examples[$scenarioName] ?? [];
+
+        $additionalSteps = $this->loadScenarioSteps($scenarioName);
+        $stepRunner = new StepRunner($additionalSteps, $this->_stepRunner, $this);
+
+        $test = new Scenario((string) $this->_storyName, $scenarioName, $steps, $stepRunner);
+        $this->Scenario = $scenarioName;
+        $this->Story = $this->_storyName;
+
+        $outcome = $test->executeScenario($this, $examples);
+        $outcome['scenario'] = $scenarioName;
+
+        // Record the story details for the BDD output extension (which
+        // renders after PHPUnit has counted assertions for this test).
+        ScenarioResultRegistry::record(static::class, 'testScenario', $outcome);
+
+        if ($outcome['asserts'] > 0) {
+            $this->addToAssertionCount((int) $outcome['asserts']);
+        } else {
+            $this->expectNotToPerformAssertions();
+        }
+
+        switch ($outcome['status']) {
+            case 'Passed':
+                return;
+
+            case 'Pending':
+                throw $outcome['exception']
+                    ?? new IncompleteTestError('Scenario Not Implemented: ' . $scenarioName);
+
+            case 'Skipped':
+                throw $outcome['exception']
+                    ?? new SkippedWithMessageException('Scenario Skipped: ' . $scenarioName);
+
+            case 'Failed':
+            case 'Exception':
+            default:
+                throw $outcome['exception']
+                    ?? new RuntimeException('Unknown exception occurred in scenario: ' . $scenarioName);
+        }
     }
 
-    public function getSuite()
+    public function getWebDriver(?string $alternativeHost = null): mixed
+    {
+        if ($this->webdriver === null) {
+            if (isset($this->container) && isset($this->container['WebDriver'])) {
+                $host = is_null($alternativeHost) ? $this->container['SeleniumHost'] : $alternativeHost;
+                $factory = $this->container['WebDriver'];
+                $this->webdriver = $factory($host);
+            }
+        }
+
+        if (is_null($this->webdriver)) {
+            throw new \Exception("WebDriver not available from \$this->container['WebDriver']");
+        }
+        return $this->webdriver;
+    }
+
+    public function &getReference(string $arg): mixed
+    {
+        if (!property_exists($this, $arg)) {
+            $this->{$arg} = null;
+        }
+        return $this->{$arg};
+    }
+
+    public function getSuite(): string|false
     {
         return $this->_storyName;
     }
 
-    protected function loadSteps()
+    protected function loadSteps(): void
     {
-        // Load Global Steps (Modules & inclass)
-        $t = $this->getAnnotations();
-
-        if(isset($t['class']['stepClass'])) {
-        	$stepClasses = $t['class']['stepClass'];
-        }
+        $stepClasses = $this->classAnnotation('stepClass');
 
         if (!empty($stepClasses)) {
             $this->_stepRunner = $this->register(new StepRunner());
             foreach ($stepClasses as $class) {
-                $runner = $this->register(new $class(), true);
+                $resolved = $this->resolveStepClass($class);
+                $runner = $this->register(new $resolved(), true);
                 $this->_stepRunner->addStepModule($runner);
             }
         } else {
@@ -114,160 +173,299 @@ abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
         }
     }
 
-    protected function loadScenarioSteps($name)
+    /**
+     * Load step modules attached (via @stepClass method annotations) to the
+     * method named after a scenario, e.g. scenario "Step Functions" looks up
+     * stepFunctions().
+     */
+    protected function loadScenarioSteps(string $name): ?StepRunner
     {
-        $method = $this->sentenceToCamelCase($name);
         $stepRunner = null;
+        $method = $this->sentenceToCamelCase($name);
 
         if (method_exists($this, $method)) {
-            // Load Global Steps (Modules & inclass)
-            $t = $this->getAnnotations($method);
-            $stepClasses = $t['method']['stepClass'];
+            $stepClasses = $this->methodAnnotation($method, 'stepClass');
             if (!empty($stepClasses)) {
                 $stepRunner = $this->register(new StepRunner());
                 foreach ($stepClasses as $class) {
-                    $runner = $this->register(new $class(), true);
+                    $resolved = $this->resolveStepClass($class);
+                    $runner = $this->register(new $resolved(), true);
                     $stepRunner->addStepModule($runner);
                 }
             }
         }
-        // Load Steps for a specific Scenario
         return $stepRunner;
     }
 
-    protected function loadScenarioSuite()
+    public function &register(Module &$mod, bool $directWrite = false): Module
     {
-        $class = get_class($this);
-        $reflection = new \ReflectionClass($class);
-        $scenarioDir = dirname($reflection->getFileName());
-
-        if (isset($this->scenarioFile)) {
-            $file = $this->scenarioFile;
-        } else {
-            $class = preg_replace('/Test$/', '', $class);
-            $file = "";
-            $class = (strpos($class, "\\") !== false) ? end(explode("\\", $class)) : $class;
-            $file .= $class{0};
-            for ($i = 1; $i < strlen($class); $i++) {
-                if (ctype_upper($class{$i}) && !ctype_upper($class{$i - 1})) {
-                    $file .= '_';
-                } else if ($i > 1 &&
-                           !ctype_upper($class{$i}) &&
-                           ctype_upper($class{$i - 1}) &&
-                           ctype_upper($class{$i - 2})) {
-                    $file = substr($file, 0, strlen($file) - 1);
-                    $file.='_';
-                    $file.=$class{$i - 1};
-                }
-                $file .= $class{$i};
-            }
-            $file = strtolower($file);
-        }
-
-        $full = $scenarioDir . "/" . $file . ".suite";
-        $contents = file_get_contents($full);
-        $this->parseScenarioSuite($full, $contents);
-    }
-
-    protected function sentenceToCamelCase($sentence)
-    {
-        $sentence = trim($sentence);
-        $sentence = preg_replace("/\s\s?/", " ", $sentence);
-        $sentence = explode(" ", $sentence);
-        $cs = "";
-        foreach ($sentence as $word) {
-            $cs .= ucfirst($word);
-        }
-        $cs = lcfirst($cs);
-        return $cs;
+        $mod->register($this, $directWrite);
+        return $mod;
     }
 
     /**
-     * @todo Cleanup ParseLogic. Break into smaller more maintainble chunks.
+     * Resolve a @stepClass annotation value to a loadable class name:
+     * the literal name first, then the same namespace as the suite.
      */
-    protected function parseScenarioSuite($fullFile, $contents)
+    protected function resolveStepClass(string $class): string
     {
-        $contents = explode("\n", $contents);
+        if (class_exists($class)) {
+            return $class;
+        }
+        $namespace = (new \ReflectionClass($this))->getNamespaceName();
+        if ($namespace !== '' && class_exists($namespace . '\\' . $class)) {
+            return $namespace . '\\' . $class;
+        }
+        throw new RuntimeException("Step class '$class' referenced via @stepClass could not be loaded");
+    }
+
+    /**
+     * Values for a single class-level annotation, e.g. @stepClass.
+     *
+     * @return list<string>
+     */
+    protected function classAnnotation(string $name): array
+    {
+        $reflection = new \ReflectionClass($this);
+        $doc = $reflection->getDocComment();
+        return $doc === false ? [] : $this->extractAnnotation($doc, $name);
+    }
+
+    /**
+     * Values for a single method-level annotation, e.g. @stepClass.
+     *
+     * @return list<string>
+     */
+    protected function methodAnnotation(string $method, string $name): array
+    {
+        try {
+            $reflection = new \ReflectionMethod($this, $method);
+        } catch (\ReflectionException) {
+            return [];
+        }
+        $doc = $reflection->getDocComment();
+        return $doc === false ? [] : $this->extractAnnotation($doc, $name);
+    }
+
+    /** @return list<string> */
+    private function extractAnnotation(string $doc, string $name): array
+    {
+        $values = [];
+        if (preg_match_all('/@' . preg_quote($name, '/') . '\s+(\S+)/', $doc, $matches)) {
+            $values = $matches[1];
+        }
+        return $values;
+    }
+
+    protected function sentenceToCamelCase(string $sentence): string
+    {
+        $sentence = trim($sentence);
+        $sentence = preg_replace('/\s\s?/', ' ', $sentence) ?? $sentence;
+        $words = explode(' ', $sentence);
+        $cs = '';
+        foreach ($words as $word) {
+            $cs .= ucfirst($word);
+        }
+        return lcfirst($cs);
+    }
+
+    /**
+     * Parse (once per class) the .suite file backing a ScenarioSuite class.
+     *
+     * @param class-string $class
+     *
+     * @return array{scenarios: array<string, list<string>>, examples: array<string, array<string, list<string>>>, story: list<string>, storyName: string}
+     */
+    protected static function parsedSuiteFor(string $class): array
+    {
+        if (isset(self::$parsedSuites[$class])) {
+            return self::$parsedSuites[$class];
+        }
+
+        $file = self::suiteFileFor($class);
+        $full = $file;
+        $contents = file_get_contents($full);
+        if ($contents === false) {
+            throw new RuntimeException("Unable to read scenario suite file: $full");
+        }
+
+        $parsed = self::parseScenarioSuite($contents, $full);
+        $parsed['storyName'] ??= '';
+
+        self::$parsedSuites[$class] = $parsed;
+        return $parsed;
+    }
+
+    /**
+     * Derive the .suite file path for a suite class: the class name in
+     * snake_case (trailing "Test" dropped) next to the declaring file,
+     * unless the subclass defines a public string $scenarioFile property.
+     *
+     * @param class-string $class
+     */
+    protected static function suiteFileFor(string $class): string
+    {
+        $reflection = new \ReflectionClass($class);
+        $scenarioDir = dirname($reflection->getFileName());
+
+        if ($reflection->hasProperty('scenarioFile')) {
+            $props = $reflection->getDefaultProperties();
+            if (isset($props['scenarioFile']) && is_string($props['scenarioFile'])) {
+                return $props['scenarioFile'];
+            }
+        }
+
+        $short = $class;
+        if (str_contains($short, '\\')) {
+            $parts = explode('\\', $short);
+            $short = (string) end($parts);
+        }
+        $short = preg_replace('/Test$/', '', $short) ?? $short;
+
+        $file = strtolower(self::camelToSnake($short));
+        return $scenarioDir . '/' . $file . '.suite';
+    }
+
+    private static function camelToSnake(string $class): string
+    {
+        $file = $class[0];
+        $len = strlen($class);
+        for ($i = 1; $i < $len; $i++) {
+            if (ctype_upper($class[$i]) && !ctype_upper($class[$i - 1])) {
+                $file .= '_';
+            } elseif ($i > 1
+                && !ctype_upper($class[$i])
+                && ctype_upper($class[$i - 1])
+                && ctype_upper($class[$i - 2])
+            ) {
+                $file = substr($file, 0, strlen($file) - 1)
+                    . '_' . $class[$i - 1];
+            }
+            $file .= $class[$i];
+        }
+        return $file;
+    }
+
+    /**
+     * Parse the .suite spec format:
+     *
+     *   #Story: <story title>
+     *   <free-text story description>
+     *
+     *   #Scenario: <scenario title>
+     *   Given ...
+     *   When ...
+     *   Then ...
+     *   And ... / But ...
+     *
+     *   Examples:
+     *       | col1 | col2 |
+     *       | a    | b    |
+     *
+     * @return array{scenarios: array<string, list<string>>, examples: array<string, array<string, list<string>>>, story: list<string>, storyName: string}
+     */
+    public static function parseScenarioSuite(string $contents, string $fullFile): array
+    {
+        $lines = explode("\n", $contents);
         $mode = null;
         $lastCommand = null;
-        $story = false;
-        $match = array();
-        $pointer = false;
-        $emptyState = false;
-        foreach ($contents as $line) {
+        $scenarios = [];
+        $examples = [];
+        $story = [];
+        $storyName = '';
+        $match = [];
+        $scenario = null;
+
+        // $pointer targets either $scenarios[<name>], $examples[<name>] or $story
+        $pointer = null;
+        $emptyState = null;
+        $pointerKind = '';
+
+        $headerLine = false;
+
+        foreach ($lines as $line) {
             $line = trim($line);
-            if (preg_match("/#Scenario:(.*)/", $line, $matches)) {
-                $mode = "Scenario";
+            if (preg_match('/#Scenario:(.*)/', $line, $matches)) {
+                $mode = 'Scenario';
                 $lastCommand = null;
-                //$scenario = $this->sentenceToCamelCase($matches[1]);
-                $scenario = $matches[1];
-                if (!empty($this->_scenarios[$scenario])) {
-                    print("Duplicate Test Case Found ($scenario)\nLine $cursor in $fullFile\n\n");
+                $scenario = trim($matches[1]);
+                if (isset($scenarios[$scenario])) {
+                    print("Duplicate Test Case Found ($scenario)\n in $fullFile\n\n");
                     trigger_error("duplicate scenario definition for ($scenario) in $fullFile\n", E_USER_WARNING);
-                    $pointer = & $emptyState;
+                    $pointer = &$emptyState;
+                    $pointerKind = '';
                 } else {
-                    $this->_scenarios[$scenario] = array();
-                    $pointer = & $this->_scenarios[$scenario];
+                    $scenarios[$scenario] = [];
+                    $pointer = &$scenarios[$scenario];
+                    $pointerKind = 'scenarios';
                 }
-            } else if (preg_match("/#Story:(.*)/", $line, $matches)) {
-                $mode = "Story";
+            } elseif (preg_match('/#Story:(.*)/', $line, $matches)) {
+                $mode = 'Story';
                 $lastCommand = null;
-                $this->_storyName = $this->sentenceToCamelCase($matches[1]);
-                if (!empty($this->_story)) {
-                    print("multiple Story definitions found in $fullFile\n"); 
-                    trigger_error("multiple Story definitions found in $fullFile\n", E_USER_WARNING);
-                    $pointer = & $emptyState;
-                } else {
-                    $this->_story = array();
-                    $pointer = &$this->_story;
+                $camel = preg_replace('/\s\s?/', ' ', trim($matches[1]));
+                $words = explode(' ', (string) $camel);
+                $cs = '';
+                foreach ($words as $word) {
+                    $cs .= ucfirst($word);
                 }
-            } else if (preg_match("/Examples:/", $line)) {
-                $mode = "Example";
+                $storyName = lcfirst($cs);
+                if (!empty($story)) {
+                    print("multiple Story definitions found in $fullFile\n");
+                    trigger_error("multiple Story definitions found in $fullFile\n", E_USER_WARNING);
+                    $pointer = &$emptyState;
+                    $pointerKind = '';
+                } else {
+                    $story = [];
+                    $pointer = &$story;
+                    $pointerKind = 'story';
+                }
+            } elseif (preg_match('/Examples:/', $line)) {
+                $mode = 'Example';
                 $lastCommand = null;
                 $headerLine = false;
-                $this->_examples[$scenario] = array();
-                $pointer = & $this->_examples[$scenario];
+                if ($scenario === null) {
+                    trigger_error("Examples block found outside of a scenario in $fullFile\n", E_USER_WARNING);
+                    continue;
+                }
+                $examples[$scenario] = [];
+                $pointer = &$examples[$scenario];
+                $pointerKind = 'examples';
             } else {
-
-                if ($mode == "Example") {
-                    if ($headerLine) {
-                        if (!empty($line)) {
-                            $values = explode("|", $line);
+                if ($mode === 'Example') {
+                    if ($headerLine !== false) {
+                        if ($line !== '') {
+                            $values = explode('|', $line);
                             foreach ($headerLine as $k => $v) {
-                                $pointer[$v][] = trim(isset($values[$k + 1]) ? $values[$k + 1] : "");
+                                $pointer[$v][] = trim(isset($values[$k + 1]) ? $values[$k + 1] : '');
                             }
                         }
                     } else {
-                        $line = trim($line);
-                        if (!empty($line)) {
-                            $headerLine = explode("|", $line);
+                        if ($line !== '') {
+                            $headerLine = explode('|', $line);
                             array_shift($headerLine);
                             array_pop($headerLine);
                             foreach ($headerLine as $k => $v) {
                                 $headerLine[$k] = trim($v);
                             }
-
-                            foreach ($headerLine as $k => $v) {
-                                $pointer[$v] = array();
+                            foreach ($headerLine as $v) {
+                                $pointer[$v] = [];
                             }
                         }
                     }
                 } else {
-                    if ($pointer !== false && strlen($line)) {
-                        if (strpos($line, "#") !== 0 && strpos($line, "--") !== 0) {
-                            if ($mode == "Scenario") {
-                                if (strpos(strtolower($line), "given") === 0) {
-                                    $lastCommand = "Given";
-                                } else if (strpos(strtolower($line), "when") === 0) {
-                                    $lastCommand = "When";
-                                } else if (strpos(strtolower($line), "Then") === 0) {
-                                    $lastCommand = "Then";
-                                } else if (strpos(strtolower($line), "and") === 0 ||
-                                           strpos(strtolower($line), "but") === 0) {
+                    if ($pointer !== null && strlen($line)) {
+                        if (strpos($line, '#') !== 0 && strpos($line, '--') !== 0) {
+                            if ($mode === 'Scenario') {
+                                $lowered = strtolower($line);
+                                if (str_starts_with($lowered, 'given')) {
+                                    $lastCommand = 'Given';
+                                } elseif (str_starts_with($lowered, 'when')) {
+                                    $lastCommand = 'When';
+                                } elseif (str_starts_with($lowered, 'then')) {
+                                    $lastCommand = 'Then';
+                                } elseif (str_starts_with($lowered, 'and') || str_starts_with($lowered, 'but')) {
                                     if (is_null($lastCommand)) {
                                         trigger_error("And must proceed Given,When or Then ($line)", E_USER_ERROR);
-                                    } else {
-
                                     }
                                 }
                             }
@@ -277,180 +475,12 @@ abstract class ScenarioSuite extends \PHPUnit_Framework_TestCase
                 }
             }
         }
+
+        return [
+            'scenarios' => $scenarios,
+            'examples' => $examples,
+            'story' => $story,
+            'storyName' => $storyName,
+        ];
     }
-
-    public function getNumAssertions()
-    {
-        return $this->numAsserts;
-    }
-
-    public function replaceStoryListener($result)
-    {
-        $r = new \ReflectionObject($result);
-        $p = $r->getProperty("listeners");
-        $p->setAccessible(true);
-        $listeners = $p->getValue($result);
-        foreach ($listeners as &$listener) {
-        	//PHPUnit_Extensions_Story_ResultPrinter_Text
-
-            if ($listener instanceof \PHPUnit_Util_TestDox_ResultPrinter_Text) {
-                $this->_stockStoryPrinter = $listener;
-                $t = new BDDPrinter();
-                $t->register($this->_stockStoryPrinter);
-                $listener = $t;
-            } else {
-
-            }
-        }
-        $p->setValue($result, $listeners);
-    }
-
-    public function restoreStoryListener($result)
-    {
-        if (isset($this->_stockStoryPrinter)) {
-            $r = new \ReflectionObject($result);
-            $p = $r->getProperty("listeners");
-            $p->setAccessible(true);
-            $listeners = $p->getValue($result);
-            foreach ($listeners as &$listener) {
-                if ($listener instanceof BDDPrinter) {
-                    $listener = $listener->getOwner();
-                }
-            }
-            $p->setValue($result, $listeners);
-        }
-    }
-
-    public function run( \PHPUnit_Framework_TestResult $result = NULL )
-    {
-        static $ran = array();
-
-        if (empty($ran[$this->_storyName])) {
-            $ran[$this->_storyName] = true;
-            if ($result == NULL) {
-                $result = $this->createResult();
-            }
-            $this->replaceStoryListener($result);
-            foreach ($this->_scenarios as $key => $scenario) {
-                $this->runSinglePass($key, $scenario, $result);
-            }
-            $this->restoreStoryListener($result);
-            return $result;
-        }
-    }
-
-    protected function runSinglePass($name, $scenario, &$result, $example = null)
-    {
-        $this->name = $name;
-        $steps = $scenario;
-        if (!empty($this->_examples) && array_key_exists($name, $this->_examples)) {
-            $examples = $this->_examples[$name];
-        } else {
-            $examples = array();
-        }
-
-        $additionalSteps = $this->loadScenarioSteps($name);
-
-        $stepRunner = new StepRunner($additionalSteps, $this->_stepRunner, $this);
-        $test = new Scenario($this->_storyName, $name, $steps, $stepRunner);
-
-        $c = clone $this;
-        $c->Story = $this->_storyName;
-        $c->Scenario = $name;
-        $result->startTest($c);
-        if(ENABLE_UTIL) \PHPUnit_Util_Timer::start();
-        try {
-             // setup
-             if(method_exists($this, "setUp")) {
-                  $this->setUp();
-             }
-
-             $test->executeScenario($result, $examples);
-
-             // tearDown
-             if(method_exists($this, "tearDown")) {
-                  $this->tearDown();
-             }
-        } catch(\Exception $e) {
-             $result->currentScenario['status'] = "Exception";
-             $result->currentScenario['exception'] = $e;
-        }
-
-
-        $c->currentScenario = $result->currentScenario;
-        $c->numAsserts += $result->currentScenario['asserts'];
-        if(ENABLE_UTIL)
-        {
-        	$current = \PHPUnit_Util_Timer::current();
-        } else {
-        	$current = 0;
-        }
-
-        switch ($result->currentScenario['status']) {
-            case 'Passed':
-                // Hurrah
-                break;
-
-            case 'Skipped':
-            case 'Incomplete':
-            case 'Failed':
-                $result->addFailure(
-                    $c, $result->currentScenario['exception'],
-                    $current
-                );
-                break;
-
-            case 'Exception':
-                $result->addError(
-                    $c,
-                    $result->currentScenario['exception'],
-                    $current
-                );
-                break;
-
-            case 'Pending':
-                $result->addError(
-                    $c,
-                    (isset($result->currentScenario['exception']) ?
-                            $result->currentScenario['exception'] :
-                            new \PHPUnit_Framework_IncompleteTestError("Test Not Implemented")),
-                    		$current
-                );
-                break;
-            default:
-                $result->addError(
-                    $c,
-                    (isset($result->currentScenario['exception']) ?
-                            $result->currentScenario['exception'] :
-                            new \Exception("Unknown Exception Occurred")),
-                            $current
-                );
-                // new PHPUnit_Framework_AssertionFailedError("Unknown Exception Occurred"))
-                break;
-        }
-
-        if(ENABLE_UTIL)
-        {
-        	$stop = \PHPUnit_Util_Timer::current();
-        } else {
-        	$stop = 0;
-        }
-        $result->endTest($c, $stop);
-    }
-
-    protected function convertResult($standard)
-    {
-        $result = new \TestResult;
-        $result->convert($standard);
-        return $result;
-    }
-
-    public function getAnnotations($method = '')
-    {
-        return \PHPUnit_Util_Test::parseTestMethodAnnotations(
-            get_class($this), $method
-        );
-    }
-
 }
-

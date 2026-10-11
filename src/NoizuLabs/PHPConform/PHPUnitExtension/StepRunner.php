@@ -1,16 +1,14 @@
 <?php
+
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
 
-require_once(dirname(__FILE__) . "/StepAbstract.php");
 class StepRunner extends StepAbstract
 {
-
     public function __construct(
-         StepAbstract $scenarioModules = null,
-         StepAbstract $storyModules = null,
-         $suiteModules = null
-    )
-    {
+        ?StepAbstract $scenarioModules = null,
+        ?StepAbstract $storyModules = null,
+        mixed $suiteModules = null
+    ) {
         if (!empty($scenarioModules)) {
             $this->addStepModule($scenarioModules);
         }
