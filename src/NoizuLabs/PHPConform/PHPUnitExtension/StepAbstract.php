@@ -219,7 +219,10 @@ abstract class StepAbstract extends Module
             $sentence = '';
 
             if (preg_match('/@([tT]hen|[wW]hen|[gG]iven) (.*)/', $doc, $matches)) {
-                $sentence = ucfirst($matches[1]) . ' ' . trim($matches[2]);
+                // Single-line docblocks ("/** @given a calculator */") leave the
+                // comment terminator in the captured sentence; strip it.
+                $sentence = ucfirst($matches[1]) . ' ' .
+                    trim((string) preg_replace('#\*/\s*$#', '', $matches[2]));
             }
 
             $varmap = null;

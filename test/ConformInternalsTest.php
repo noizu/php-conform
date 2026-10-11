@@ -110,6 +110,13 @@ class ConformInternalsTest extends TestCase
         $result = (new AttributeStepFixture())->executeStep('Given an attribute declared step');
         $this->assertSame('Passed', $result['result']);
     }
+
+    public function testSingleLineDocblockRegistersStepSentence(): void
+    {
+        $result = (new SingleLineDocblockSteps())->executeStep('Given a calculator');
+        $this->assertSame('Passed', $result['result']);
+        $this->assertSame(1, $result['asserts']);
+    }
 }
 
 class StepFixture extends StepAbstract
@@ -192,6 +199,15 @@ class AttributeStepFixture extends StepAbstract
 {
     #[\NoizuLabs\PHPConform\PHPUnitExtension\Attributes\Given('an attribute declared step')]
     public function attributeStep()
+    {
+        $this->assertTrue(true);
+    }
+}
+
+class SingleLineDocblockSteps extends StepAbstract
+{
+    /** @given a calculator */
+    public function createCalculator()
     {
         $this->assertTrue(true);
     }
