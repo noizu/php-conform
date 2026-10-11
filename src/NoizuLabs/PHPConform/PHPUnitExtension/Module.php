@@ -15,7 +15,7 @@ abstract class Module extends Assert
     protected mixed $_noizuOwner = null;
     protected bool $_noizuDirectWrite = false;
 
-    public function register(&$owner, $directWrite = false)
+    public function register(mixed $owner, bool $directWrite = false)
     {
         $this->_noizuRegistered = true;
         $this->_noizuOwner = $owner;

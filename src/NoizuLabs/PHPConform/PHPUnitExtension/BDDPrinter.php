@@ -150,6 +150,7 @@ class BDDPrinter
             'Passed' => '[+]',
             'Failed' => '[-]',
             'Pending' => '[P]',
+            'Skipped' => '[S]',
             'Multi' => '[M]',
             'Abort' => '[A]',
             default => '[?]',
@@ -162,6 +163,7 @@ class BDDPrinter
             'Passed' => 'light_green',
             'Failed' => 'light_red',
             'Pending' => 'yellow',
+            'Skipped' => 'brown',
             'Multi' => 'light_blue',
             default => 'light_gray',
         };
@@ -173,6 +175,7 @@ class BDDPrinter
             'Passed' => 'green',
             'Failed' => 'red',
             'Incomplete', 'Pending' => 'yellow',
+            'Skipped' => 'brown',
             'Multi' => 'light_blue',
             default => $this->defaultStatusColor,
         };

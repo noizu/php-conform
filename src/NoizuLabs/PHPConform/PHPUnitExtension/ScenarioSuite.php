@@ -197,7 +197,7 @@ abstract class ScenarioSuite extends TestCase
         return $stepRunner;
     }
 
-    public function &register(Module &$mod, bool $directWrite = false): Module
+    public function register(Module $mod, bool $directWrite = false): Module
     {
         $mod->register($this, $directWrite);
         return $mod;

@@ -3,6 +3,8 @@
 namespace NoizuLabs\PHPConform\PHPUnitExtension;
 
 use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\IncompleteTestError;
+use PHPUnit\Framework\SkippedTest;
 
 abstract class StepAbstract extends Module
 {
@@ -60,7 +62,10 @@ abstract class StepAbstract extends Module
         }
 
         $result = $this->executeLocalSteps($stepString);
-        if ($result['result'] !== 'Pending') {
+        if ($result['result'] !== 'Pending' || isset($result['exception'])) {
+            // Pending WITH an exception means the step matched and called
+            // markTestIncomplete(): the match is consumed, do not retry in
+            // contained modules.
             return $result;
         }
 
@@ -101,7 +106,11 @@ abstract class StepAbstract extends Module
                     $asserts = $this->snapshotAssertCount();
                     $this->_failed = true;
                     $this->_failure = $e;
-                    $response = ['result' => 'Failed', 'asserts' => $asserts, 'exception' => $e];
+                    $response = [
+                        'result' => $this->softResultFor($e),
+                        'asserts' => $asserts,
+                        'exception' => $e,
+                    ];
                 } catch (\Exception $e) {
                     $asserts = $this->snapshotAssertCount();
                     $this->_failed = true;
@@ -120,7 +129,11 @@ abstract class StepAbstract extends Module
                     $asserts = $this->snapshotAssertCount();
                     $this->_failed = true;
                     $this->_failure = $e;
-                    $response = ['result' => 'Failed', 'asserts' => $asserts, 'exception' => $e];
+                    $response = [
+                        'result' => $this->softResultFor($e),
+                        'asserts' => $asserts,
+                        'exception' => $e,
+                    ];
                 } catch (\Exception $e) {
                     $asserts = $this->snapshotAssertCount();
                     $this->_failed = true;
@@ -153,25 +166,32 @@ abstract class StepAbstract extends Module
         return $asserts;
     }
 
+    /**
+     * Steps that call markTestIncomplete()/markTestSkipped() throw
+     * AssertionFailedError subclasses; surface their intent instead of a
+     * generic failure.
+     */
+    private function softResultFor(\Exception $e): string
+    {
+        if ($e instanceof IncompleteTestError) {
+            return 'Pending';
+        }
+        if ($e instanceof SkippedTest) {
+            return 'Skipped';
+        }
+        return 'Failed';
+    }
+
     public function registerSteps(): void
     {
         $this->registerClassSteps($this);
     }
 
     /**
-     * Scan a class for @given/@when/@then docblock step definitions.
-     *
-     * Three binding styles are supported:
-     *  - exact sentence match:            @when running phpunit
-     *  - pregmatch + capture groups:      @pregmatch # ... (.*) ...   -> $matches
-     *  - dollar-sign token binding:       @when I add $arg1 plus $arg2
-     *    where each $token becomes a ([^\s]*) capture bound, in order,
-     *    to the method's parameters.
-     *
-     * As an alternative to docblocks, step definitions may also be declared
-     * with PHP 8 attributes: #[Given('a calculator')], #[When('...')],
-     * #[Then('...')] and #[PregMatch('/')]. Docblock support is unchanged;
-     * attributes are additive.
+     * Scan a class for step definitions declared with the docblock
+     * annotations ("given"/"when"/"then" keyword sentences, optional
+     * "pregmatch" mode, dollar-sign token binding) or the PHP 8
+     * attributes (Given/When/Then, optional PregMatch).
      */
     public function registerClassSteps(object $targetClass): void
     {
@@ -180,6 +200,12 @@ abstract class StepAbstract extends Module
         $matches = [];
 
         foreach ($methods as $method) {
+            // Never register the library's own plumbing as steps.
+            $declaring = $method->getDeclaringClass()->getName();
+            if ($declaring === StepAbstract::class || $declaring === StepRunner::class) {
+                continue;
+            }
+
             $doc = $method->getDocComment();
             $doc = $doc === false ? '' : $doc;
             $regexp = false;
@@ -199,7 +225,8 @@ abstract class StepAbstract extends Module
             $varmap = null;
             foreach ($method->getAttributes() as $attribute) {
                 $name = $attribute->getName();
-                $short = substr($name, (int) strrpos($name, '\\'));
+                $pos = strrpos($name, '\\');
+                $short = $pos === false ? $name : substr($name, $pos + 1);
                 $args = $attribute->getArguments();
                 $text = isset($args[0]) && is_string($args[0]) ? $args[0] : '';
                 if ($short === 'PregMatch' && $text !== '') {

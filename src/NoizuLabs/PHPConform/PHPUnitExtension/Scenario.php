@@ -140,7 +140,7 @@ final class Scenario extends Module
             $stepStatus = $status['result'];
             $response['steps'][] = ['step' => $step, 'status' => $status];
 
-            if ($status['result'] === 'Failed' || $status['result'] === 'Pending') {
+            if ($status['result'] === 'Failed' || $status['result'] === 'Pending' || $status['result'] === 'Skipped') {
                 $response['status'] = $status['result'];
 
                 if ($noFailure) {
@@ -153,9 +153,13 @@ final class Scenario extends Module
                         }
                         $response['exception'] = $status['exception'] ?? null;
                         $status = ['result' => 'Abort', 'asserts' => 0, 'exception' => null];
+                    } elseif ($status['result'] === 'Skipped') {
+                        $response['exception'] = $status['exception'] ?? null;
+                        $status = ['result' => 'Abort', 'asserts' => 0, 'exception' => null];
                     } else {
+                        $incoming = $status['exception'] ?? null;
                         $status = ['result' => 'Pending', 'asserts' => 0, 'exception' => null];
-                        $response['exception'] = new IncompleteTestError("Step Not Found: $step");
+                        $response['exception'] = $incoming ?? new IncompleteTestError("Step Not Found: $step");
                     }
                 }
             }

@@ -1,18 +1,19 @@
 <?php
 
-use NoizuLabs\PHPConform\PHPUnitExtension as PhpConform;
+declare(strict_types=1);
 
-require_once(dirname(__FILE__) . '/sut/Calculator.php');
+namespace NoizuLabs\PHPConform\Tests;
 
-class ExampleSteps extends PhpConform\StepAbstract
+use NoizuLabs\PHPConform\PHPUnitExtension\StepAbstract;
+use NoizuLabs\PHPConform\Tests\sut\Calculator;
+
+class ExampleSteps extends StepAbstract
 {
-
     /**
      * @given a php conform test
      */
     public function SetupPHPConformTest()
     {
-
     }
 
     /**
@@ -20,7 +21,6 @@ class ExampleSteps extends PhpConform\StepAbstract
      */
     public function RunningPHPUnit()
     {
-
     }
 
     /**
@@ -43,7 +43,7 @@ class ExampleSteps extends PhpConform\StepAbstract
     /**
      * @when we call a step function that uses the dollar sign notation to match and store the value of $var
      */
-    public function storeVariabeRetrievedUsingDollarSignNotation($var)
+    public function storeVariableRetrievedUsingDollarSignNotation($var)
     {
         $this->inputValue = intval($var);
     }
@@ -77,7 +77,7 @@ class ExampleSteps extends PhpConform\StepAbstract
      */
     public function Addition($arg1, $arg2)
     {
-        $this->_calculator->add($arg1, $arg2);
+        $this->_calculator->add((int) $arg1, (int) $arg2);
     }
 
     /**
@@ -85,7 +85,7 @@ class ExampleSteps extends PhpConform\StepAbstract
      */
     public function Multiplication($arg1, $arg2)
     {
-        $this->_calculator->multiply($arg1, $arg2);
+        $this->_calculator->multiply((int) $arg1, (int) $arg2);
     }
 
     /**
@@ -97,4 +97,11 @@ class ExampleSteps extends PhpConform\StepAbstract
         $this->assertEquals(intval($arg), $this->_calculator->equals());
     }
 
+    /**
+     * @then the calculator should sing a little tune
+     */
+    public function calculatorSings()
+    {
+        $this->assertTrue(true, 'la la la');
+    }
 }

@@ -1,24 +1,35 @@
 <?php
-global $noizulabs_phpconform_container;
 
-error_reporting(E_ERROR | E_WARNING); 
-ini_set('display_errors', 'on'); 
+declare(strict_types=1);
 
-if(file_exists(__DIR__ . "/../vendor/autoload.php")) {
-   require_once(__DIR__ . "/../vendor/autoload.php"); 
-} else if (file_exists(__DIR__ . "/../../../autoload.php")) {
-   require_once( __DIR__ . "/../../../vendor/autoload.php");
+namespace NoizuLabs\PHPConform\Tests;
+
+/**
+ * Optional bootstrap for the PHP-Conform development suite.
+ *
+ * Selenium support is optional: the pimple container and webdriver client
+ * are only wired up when the packages are present.
+ */
+
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} elseif (file_exists(__DIR__ . '/../../../autoload.php')) {
+    require_once __DIR__ . '/../../../vendor/autoload.php';
 } else {
-   trigger_error("Unable To Locate Required Autoloader for the NoizuLabs/FragmentedKeys Libraries"); 
+    trigger_error('Unable to locate required autoloader for the NoizuLabs/PHPConform library');
 }
 
+$containerClass = '\Pimple\Container';
+$webdriverClass = '\WebDriver\WebDriver';
 
-$host = getenv("SELENIUM_SERVER_HOST"); 
+if (class_exists($containerClass)) {
+    $noizulabs_phpconform_container = new $containerClass();
+    $noizulabs_phpconform_container['SeleniumHost'] = getenv('SELENIUM_SERVER_HOST') ?: null;
 
-$noizulabs_phpconform_container = new \Pimple(); 
-$noizulabs_phpconform_container['SeleniumHost'] = $host;
-$noizulabs_phpconform_container['WebDriver'] =  function() { 
-	$c = function($host) { return new \WebDriver\WebDriver($host) ;}; 
-        return $c; 
-};
- 
+    if (class_exists($webdriverClass)) {
+        $noizulabs_phpconform_container['WebDriver'] = static fn () => static fn ($host) => new \WebDriver\WebDriver($host);
+    }
+}
