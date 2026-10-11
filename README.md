@@ -130,6 +130,20 @@ class CalculatorScenarioTest extends ScenarioSuite
 }
 ```
 
+### Step resolution order
+
+A sentence is resolved against the suite class first, then each
+`@stepClass` module in declaration order, depth-first through nested
+modules. **The first module that matches consumes the sentence** — later
+modules are not consulted, even if they also define it.
+
+This includes a matched step that calls `markTestIncomplete()`: it
+matched, so its `Pending:` explanation is kept rather than discarded in
+favour of a later module's definition. A module that simply has no
+definition for the sentence does not consume it, and resolution
+continues to the next one. If nothing matches anywhere, the step renders
+`[P]` with no explanation.
+
 Each `#Scenario:` block becomes one PHPUnit test (named after the
 scenario). Attach extra step modules per scenario with a `@stepClass`
 annotation on a method named after the scenario in camelCase:
