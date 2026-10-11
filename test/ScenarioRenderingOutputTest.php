@@ -7,6 +7,10 @@ namespace NoizuLabs\PHPConform\Tests;
 use NoizuLabs\PHPConform\PHPUnitExtension\BDDPrinter;
 use NoizuLabs\PHPConform\PHPUnitExtension\BDDSubscriber;
 use NoizuLabs\PHPConform\Tests\Rendering\RenderingCoverageTest;
+use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\IncompleteTestError;
+use PHPUnit\Framework\SkippedTest;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -70,20 +74,48 @@ class ScenarioRenderingOutputTest extends TestCase
     }
 
     /**
-     * Run one fixture scenario for real (its failure/skip/incomplete
-     * outcome is expected and swallowed), then render the recorded story
+     * Run one fixture scenario for real, then render the recorded story
      * through the subscriber into a captured stream.
+     *
+     * Only the fixture scenario's OWN outcome signals are swallowed: the
+     * failed/pending/skipped fixtures throw AssertionFailedError subclasses
+     * (IncompleteTestError, SkippedWithMessageException) by design. Anything
+     * else — a missing .suite file (RuntimeException from parsedSuiteFor()),
+     * an unresolvable @stepClass, a bad fixture setup — propagates and fails
+     * THIS test at the real cause instead of a confusing "'' does not
+     * contain 'Total Asserts:'" further down.
      */
     private function renderFixtureScenario(string $scenario): string
     {
+        // The in-process scenario run below resets PHPUnit's SHARED static
+        // assertion counter around every step (Module::snapshotAssertCount()
+        // -> Assert::resetCount()), and PHPUnit only snapshots that counter
+        // once the enclosing test method returns (TestRunner does
+        // resetCount() before, addToAssertionCount(getCount()) after). Any
+        // assertion this test performs BEFORE renderFixtureScenario() would
+        // therefore be erased — with failOnRisky=true, asserting only before
+        // it would even flag the test as risky. We restore the counter so
+        // assertions made before this helper still count; assertions made
+        // AFTER it (the normal pattern in this class) are unaffected.
+        $assertsBeforeFixtureRun = Assert::getCount();
+
         $fixture = new RenderingCoverageTest('testScenario');
 
         try {
             $fixture->testScenario($scenario);
-        } catch (\Throwable) {
+        } catch (AssertionFailedError|IncompleteTestError|SkippedTest) {
             // failing/pending/skipped scenarios throw by design
         }
 
+        Assert::resetCount();
+        for ($i = 0; $i < $assertsBeforeFixtureRun; $i++) {
+            Assert::assertTrue(true, 'restore the enclosing test\'s earlier assertion count');
+        }
+
+        // renderScenario() takes the recorded outcome from
+        // ScenarioResultRegistry itself; if the fixture run above failed to
+        // record one, the rendered output stays empty and the
+        // 'Total Asserts:' assertion below fails.
         $stream = fopen('php://temp', 'w+');
         $this->assertIsResource($stream);
 

@@ -15,8 +15,12 @@
             <directory>test</directory>
             <!-- Deliberately failing/pending/skipped fixture scenarios: run
                  in isolation by ScenarioRenderingOutputTest, which asserts
-                 on the rendered marks. They must not run here. -->
-            <exclude>test/Rendering</exclude>
+                 on the rendered marks. They must not run here.
+                 NOTE the trailing slash: <exclude> is a string-prefix match
+                 (ExcludeIterator::accept does str_starts_with(realPath,
+                 exclude)), so "test/Rendering" would also swallow sibling
+                 files like test/RenderingFooTest.php. -->
+            <exclude>test/Rendering/</exclude>
         </testsuite>
     </testsuites>
 
