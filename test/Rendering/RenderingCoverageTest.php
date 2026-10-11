@@ -11,8 +11,8 @@ use NoizuLabs\PHPConform\PHPUnitExtension\ScenarioSuite;
  * BDD printer can render (passed, failed, pending, skipped, aborted,
  * multi). This file is deliberately NOT part of the main test suite
  * (the root phpunit.xml excludes this directory): these scenarios are
- * meant to fail/skip, and are executed by ScenarioRenderingOutputTest
- * in an isolated child phpunit process whose output is asserted on.
+ * meant to fail/skip, and are driven by ScenarioRenderingOutputTest,
+ * which asserts on the rendered story output.
  *
  * @stepClass RenderingSteps
  */

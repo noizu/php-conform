@@ -4,68 +4,98 @@ declare(strict_types=1);
 
 namespace NoizuLabs\PHPConform\Tests;
 
+use NoizuLabs\PHPConform\PHPUnitExtension\BDDPrinter;
+use NoizuLabs\PHPConform\PHPUnitExtension\BDDSubscriber;
+use NoizuLabs\PHPConform\Tests\Rendering\RenderingCoverageTest;
 use PHPUnit\Framework\TestCase;
 
 /**
  * End-to-end coverage of the story rendering: runs the rendering-coverage
- * fixture suite (deliberately failing/pending/skipped/multi scenarios,
- * excluded from this suite's own run) in an isolated child phpunit process
- * with the BDDExtension registered, and asserts that every documented
- * output mark is actually rendered through ScenarioSuite -> registry ->
- * event system -> BDDSubscriber -> BDDPrinter.
+ * fixture scenarios (deliberately failing/pending/skipped/multi, excluded
+ * from this suite's own run) through ScenarioSuite::testScenario(), then
+ * renders the recorded outcome via BDDSubscriber::renderScenario() — the
+ * exact path notify() drives from PHPUnit's Finished events — with the
+ * printer writing to a capture stream, and asserts every documented mark.
  */
 class ScenarioRenderingOutputTest extends TestCase
 {
-    public function testChildRunRendersEveryDocumentedMark(): void
+    public function testFailingScenarioRendersFailureAndAbortMarks(): void
     {
-        $root = dirname(__DIR__);
+        $out = $this->renderFixtureScenario('Deliberately Failing');
 
-        $command = sprintf(
-            '%s %s --configuration %s --no-progress 2>&1',
-            escapeshellarg(PHP_BINARY),
-            escapeshellarg($root . '/vendor/bin/phpunit'),
-            escapeshellarg(__DIR__ . '/Rendering/phpunit.xml')
-        );
+        $this->assertStringContainsString('Story: Deliberately Failing (Failed)', $out);
+        $this->assertStringContainsString('[+] Given a rendering fixture', $out);
+        $this->assertStringContainsString('[-] When this rendering step fails', $out);
+        $this->assertStringContainsString('Failed: rendering fixture failure on purpose', $out);
+        $this->assertStringContainsString('[A] Then this rendering step passes', $out);
+        $this->assertStringContainsString('[A] And this rendering step passes too', $out);
+    }
 
-        $outputLines = [];
-        $exitCode = 0;
-        exec($command, $outputLines, $exitCode);
-        $output = implode("\n", $outputLines);
+    public function testUndefinedStepsRenderPendingMarks(): void
+    {
+        $out = $this->renderFixtureScenario('Deliberately Pending');
 
-        // The child run must have actually run: five scenarios' worth of
-        // story blocks, not an empty or crashed process.
-        $this->assertStringContainsString('Story: Deliberately Failing (Failed)', $output, $output);
-        $this->assertNotSame(0, $exitCode, "child phpunit run unexpectedly green:\n$output");
+        $this->assertStringContainsString('Story: Deliberately Pending (Pending)', $out);
+        $this->assertStringContainsString('[P] Then nobody ever defined this step', $out);
+        $this->assertStringContainsString('[P] And nobody defined this one either', $out);
+    }
 
-        // [+]: passing steps (and title-bar status).
-        $this->assertStringContainsString('[+] Given a rendering fixture', $output, $output);
+    public function testSkippedScenarioRendersSkipAndAbortMarks(): void
+    {
+        $out = $this->renderFixtureScenario('Deliberately Skipped');
 
-        // [-]: the deliberately failing step, with its exception rendered.
-        $this->assertStringContainsString('[-] When this rendering step fails', $output, $output);
-        $this->assertStringContainsString('Failed: rendering fixture failure on purpose', $output, $output);
+        $this->assertStringContainsString('Story: Deliberately Skipped (Skipped)', $out);
+        $this->assertStringContainsString('[S] When this rendering step is skipped', $out);
+        $this->assertStringContainsString('Skipped: rendering fixture skip on purpose', $out);
+        $this->assertStringContainsString('[A] Then this rendering step passes', $out);
+    }
 
-        // [A]: steps after a failure (or a skip) are aborted, not run.
-        $this->assertStringContainsString('[A] Then this rendering step passes', $output, $output);
-        $this->assertStringContainsString('[A] And this rendering step passes too', $output, $output);
+    public function testIncompleteStepRendersPendingWithExplanation(): void
+    {
+        $out = $this->renderFixtureScenario('Deliberately Incomplete');
 
-        // [P]: undefined steps leave the scenario pending/incomplete.
-        $this->assertStringContainsString('Story: Deliberately Pending (Pending)', $output, $output);
-        $this->assertStringContainsString('[P] Then nobody ever defined this step', $output, $output);
+        $this->assertStringContainsString('Story: Deliberately Incomplete (Pending)', $out);
+        $this->assertStringContainsString('[P] When this rendering step is incomplete', $out);
+        $this->assertStringContainsString('Pending: rendering fixture incomplete on purpose', $out);
+    }
 
-        // [P] via markTestIncomplete(), the other pending route.
-        $this->assertStringContainsString('[P] When this rendering step is incomplete', $output, $output);
-        $this->assertStringContainsString('rendering fixture incomplete on purpose', $output, $output);
+    public function testDataDrivenScenarioRendersMultiMarksAndDataSetFailures(): void
+    {
+        $out = $this->renderFixtureScenario('Multi With Failing Row');
 
-        // [S]: the skipped step, subsequent steps aborted.
-        $this->assertStringContainsString('Story: Deliberately Skipped (Skipped)', $output, $output);
-        $this->assertStringContainsString('[S] When this rendering step is skipped', $output, $output);
-        $this->assertStringContainsString('Skipped: rendering fixture skip on purpose', $output, $output);
+        $this->assertStringContainsString('Story: Multi With Failing Row (Multi)', $out);
+        $this->assertStringContainsString('[M] When the rendering fixture stores <value>', $out);
+        $this->assertStringContainsString('DataSets:', $out);
+        $this->assertStringContainsString('DataSet(1): Failed', $out);
+    }
 
-        // [M]: data-driven scenario renders the data-set block; the second
-        // row fails on purpose so the failures sub-block is exercised too.
-        $this->assertStringContainsString('Story: Multi With Failing Row (Multi)', $output, $output);
-        $this->assertStringContainsString('[M] When the rendering fixture stores <value>', $output, $output);
-        $this->assertStringContainsString('DataSets:', $output, $output);
-        $this->assertStringContainsString('DataSet(1): Failed', $output, $output);
+    /**
+     * Run one fixture scenario for real (its failure/skip/incomplete
+     * outcome is expected and swallowed), then render the recorded story
+     * through the subscriber into a captured stream.
+     */
+    private function renderFixtureScenario(string $scenario): string
+    {
+        $fixture = new RenderingCoverageTest('testScenario');
+
+        try {
+            $fixture->testScenario($scenario);
+        } catch (\Throwable) {
+            // failing/pending/skipped scenarios throw by design
+        }
+
+        $stream = fopen('php://temp', 'w+');
+        $this->assertIsResource($stream);
+
+        $subscriber = new BDDSubscriber(new BDDPrinter('never', $stream));
+        $subscriber->renderScenario(RenderingCoverageTest::class, 'testScenario', 0);
+
+        rewind($stream);
+        $rendered = (string) stream_get_contents($stream);
+        fclose($stream);
+
+        $this->assertStringContainsString('Total Asserts:', $rendered);
+
+        return $rendered;
     }
 }

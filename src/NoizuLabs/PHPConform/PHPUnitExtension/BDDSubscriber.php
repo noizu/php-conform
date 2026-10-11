@@ -26,15 +26,28 @@ final class BDDSubscriber implements FinishedSubscriber
             return;
         }
 
-        $story = ScenarioResultRegistry::take($class, $test->methodName());
+        $this->renderScenario($class, $test->methodName(), $event->numberOfAssertionsPerformed());
+    }
+
+    /**
+     * Render the recorded story for a finished scenario test: take the
+     * recorded outcome from the registry, normalise the title/assertion
+     * count the same way notify() does for live events, and print it.
+     * Split out of notify() so the rendering path can be exercised
+     * in-process (see ScenarioRenderingOutputTest) without needing a
+     * constructed PHPUnit event.
+     */
+    public function renderScenario(string $class, string $method, int $numAsserts): void
+    {
+        $story = ScenarioResultRegistry::take($class, $method);
         if ($story === null) {
             return;
         }
 
-        $story['numAsserts'] = $event->numberOfAssertionsPerformed();
-        $story['title'] = $test->methodName() === 'testScenario' && isset($story['scenario'])
+        $story['numAsserts'] = $numAsserts;
+        $story['title'] = $method === 'testScenario' && isset($story['scenario'])
             ? $story['scenario']
-            : $test->methodName();
+            : $method;
 
         $this->printer->render($story);
     }
